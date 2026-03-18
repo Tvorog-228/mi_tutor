@@ -137,7 +137,7 @@
         const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = Recognition ? new Recognition() : null;
         if (recognition) {
-            recognition.lang = 'en-US'; // Escucha en inglés para practicar
+            recognition.lang = 'es-ES';
             recognition.onresult = (e) => handleUserMessage(e.results[0][0].transcript);
             recognition.onend = () => document.getElementById('record-btn').classList.remove('bg-red-600', 'animate-pulse');
         }
