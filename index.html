@@ -60,12 +60,14 @@
     </div>
 
     <script>
+
         const SCENARIOS = {
             general: "Eres un tutor de idiomas amable. Ayuda al usuario con su conversación diaria. Corrige brevemente si comete errores graves.",
             entrevista: "Eres un reclutador de una empresa internacional. Realiza una entrevista de trabajo profesional. Sé exigente y haz preguntas de seguimiento.",
             amigo: "Eres un amigo cercano. Habla de forma casual, usa expresiones coloquiales (slang) y mantén una charla relajada sobre planes de fin de semana.",
             viaje: "Eres un recepcionista de un hotel en el extranjero. El usuario acaba de llegar y tiene problemas con su reserva. Sé educado pero firme."
         };
+
 
         let currentScenario = 'general';
         const apiKey = localStorage.getItem('groq_api_key');
@@ -116,7 +118,8 @@
                     body: JSON.stringify({
                         model: "llama-3.3-70b-versatile",
                         messages: [
-                            { role: "system", content: SCENARIOS[currentScenario] + " Responde siempre en inglés (o el idioma que el usuario esté practicando) pero explica las correcciones en español si es necesario." },
+                            { role: "system",
+                              content: SCENARIOS[currentScenario] + " IMPORTANTE: Responde SIEMPRE en español. Si el usuario comete un error, escribe la corrección claramente al principio de tu respuesta." },
                             { role: "user", content: text }
                         ]
                     })
@@ -150,7 +153,7 @@
 
         function speak(text) {
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
+            utterance.lang = 'es-ES';
             window.speechSynthesis.speak(utterance);
         }
 
