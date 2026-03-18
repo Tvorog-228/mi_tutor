@@ -89,7 +89,6 @@
 
         if (!apiKey) document.getElementById('setup-screen').classList.remove('hidden');
 
-        // Actualizar etiqueta de velocidad
         speedSlider.oninput = () => speedVal.innerText = speedSlider.value;
 
         // --- GESTIÓN DE VOCES ---
@@ -184,7 +183,7 @@
             if (vIdx !== "" && voices[vIdx]) currentUtterance.voice = voices[vIdx];
 
             currentUtterance.lang = 'es-ES';
-            currentUtterance.rate = parseFloat(speedSlider.value); // <--- APLICAR VELOCIDAD
+            currentUtterance.rate = parseFloat(speedSlider.value);
             window.speechSynthesis.speak(currentUtterance);
         }
 
