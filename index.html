@@ -9,141 +9,156 @@
         .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); }
         .scenario-btn.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.2); }
         .tab-btn.active { color: #3b82f6; border-bottom: 2px solid #3b82f6; }
-        .word-highlight:active { background: #3b82f6; color: white; border-radius: 4px; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-200 min-h-screen font-sans">
 
-    <div id="auth-screen" class="fixed inset-0 z-[60] bg-slate-950 flex items-center justify-center p-6 hidden">
+    <div id="auth-screen" class="fixed inset-0 z-[70] bg-slate-950 flex items-center justify-center p-6 hidden">
         <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md shadow-2xl">
-            <h2 id="auth-title" class="text-2xl font-bold text-white mb-6 text-center">Bienvenido</h2>
+            <h2 class="text-2xl font-bold text-white mb-6 text-center">Bienvenido</h2>
             <input type="text" id="auth-user" placeholder="Usuario" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 mb-3 outline-none focus:border-blue-500 text-white">
             <input type="password" id="auth-pass" placeholder="Contraseña" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 mb-6 outline-none focus:border-blue-500 text-white">
-            <button onclick="handleAuth()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition mb-4">Entrar / Registrarse</button>
-            <p class="text-[10px] text-slate-500 text-center uppercase tracking-widest">Tus datos se guardan localmente</p>
+            <button onclick="handleAuth()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition">Entrar / Registrarse</button>
         </div>
     </div>
 
-    <div id="setup-screen" class="fixed inset-0 z-50 glass flex items-center justify-center p-6 hidden">
+    <div id="setup-screen" class="fixed inset-0 z-[60] glass flex items-center justify-center p-6 hidden">
         <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md shadow-2xl text-center">
             <h2 class="text-xl font-bold text-white mb-2">Configuración Groq</h2>
+            <p class="text-xs text-slate-400 mb-4">Introduce tu clave para conectar la IA</p>
             <input type="password" id="api-key-input" placeholder="gsk_..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 mb-4 outline-none focus:border-blue-500 text-white text-center">
             <button onclick="saveApiKey()" class="w-full bg-blue-600 py-3 rounded-xl font-bold">Guardar Key</button>
         </div>
     </div>
 
     <div class="flex flex-col h-screen max-w-lg mx-auto border-x border-slate-900 bg-slate-950">
-
         <header class="p-4 border-b border-slate-900 bg-slate-950/50 flex justify-between items-center">
             <div>
-                <h1 class="text-lg font-bold text-blue-500">LanguageCoach <span class="text-[10px] text-slate-600" id="user-display"></span></h1>
+                <h1 class="text-lg font-bold text-blue-500 leading-tight">LanguageCoach <span class="text-[10px] text-slate-600 block" id="user-display"></span></h1>
                 <div class="flex gap-4 mt-2">
-                    <button onclick="showTab('chat')" class="tab-btn active text-xs font-bold uppercase tracking-widest pb-1" id="tab-chat-btn">Chat</button>
-                    <button onclick="showTab('library')" class="tab-btn text-xs font-bold uppercase tracking-widest pb-1" id="tab-library-btn">Biblioteca</button>
+                    <button onclick="showTab('chat')" class="tab-btn active text-[10px] font-bold uppercase tracking-widest pb-1" id="tab-chat-btn">Chat</button>
+                    <button onclick="showTab('library')" class="tab-btn text-[10px] font-bold uppercase tracking-widest pb-1" id="tab-library-btn">Biblioteca</button>
                 </div>
             </div>
-            <button onclick="logout()" class="text-[10px] text-slate-600 uppercase">Salir</button>
+            <div class="flex flex-col gap-1 items-end">
+                <button onclick="logout()" class="text-[9px] text-slate-600 uppercase border border-slate-800 px-2 py-1 rounded">Cerrar Sesión</button>
+                <button onclick="resetApp()" class="text-[9px] text-red-900 uppercase">Reset Key</button>
+            </div>
         </header>
 
         <div id="view-chat" class="flex flex-col flex-grow overflow-hidden">
             <div class="p-3 bg-slate-900/30 border-b border-slate-900 grid grid-cols-2 gap-2">
                 <select id="voice-select" class="bg-slate-800 text-[10px] p-1 rounded border border-slate-700 text-white outline-none"></select>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 px-1">
                     <input type="range" id="speed-slider" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full h-1 bg-slate-800 rounded-lg appearance-none accent-blue-500">
-                    <span class="text-[10px] text-slate-500" id="speed-val">1.0x</span>
+                    <span class="text-[10px] text-slate-500 w-8" id="speed-val">1.0x</span>
                 </div>
             </div>
-            <div class="p-3 flex gap-2 overflow-x-auto no-scrollbar border-b border-slate-900">
-                <button onclick="setScenario('general')" class="scenario-btn active whitespace-nowrap px-3 py-1 rounded-full border border-slate-800 text-[10px] font-bold uppercase" id="btn-general">🏠 Gral</button>
-                <button onclick="setScenario('entrevista')" class="scenario-btn whitespace-nowrap px-3 py-1 rounded-full border border-slate-800 text-[10px] font-bold uppercase" id="btn-entrevista">💼 Trabajo</button>
-                <button onclick="setScenario('amigo')" class="scenario-btn whitespace-nowrap px-3 py-1 rounded-full border border-slate-800 text-[10px] font-bold uppercase" id="btn-amigo">🍻 Amigo</button>
+
+            <div class="p-2 flex gap-2 overflow-x-auto no-scrollbar border-b border-slate-900">
+                <button onclick="setScenario('general')" class="scenario-btn active whitespace-nowrap px-3 py-1.5 rounded-full border border-slate-800 text-[10px] font-bold uppercase" id="btn-general">🏠 General</button>
+                <button onclick="setScenario('entrevista')" class="scenario-btn whitespace-nowrap px-3 py-1.5 rounded-full border border-slate-800 text-[10px] font-bold uppercase" id="btn-entrevista">💼 Trabajo</button>
+                <button onclick="setScenario('amigo')" class="scenario-btn whitespace-nowrap px-3 py-1.5 rounded-full border border-slate-800 text-[10px] font-bold uppercase" id="btn-amigo">🍻 Amigo</button>
             </div>
+
             <main id="chat-history" class="flex-grow overflow-y-auto p-4 space-y-4 flex flex-col scroll-smooth">
                 <div class="bg-slate-900 text-slate-400 self-start p-3 rounded-2xl text-xs border border-slate-800 italic">
-                    ¡Listo para practicar! Usaré las palabras que guardes en la biblioteca.
+                    Hola. Configura tu voz y lee textos en la biblioteca para que pueda usar nuevas palabras.
                 </div>
             </main>
+
             <footer class="p-4 glass border-t border-slate-900">
-                <div class="flex items-center gap-2">
-                    <button id="record-btn" class="bg-blue-600 w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-lg shadow-lg">🎤</button>
-                    <input type="text" id="text-input" placeholder="Escribe aquí..." class="flex-grow bg-slate-900 border border-slate-800 rounded-full px-4 py-2 text-sm outline-none text-white">
-                    <button id="send-btn" class="bg-slate-800 w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-lg">🚀</button>
+                <div class="flex flex-col gap-2">
+                    <p id="status" class="text-[9px] text-slate-600 text-center uppercase tracking-widest h-3 font-bold">Listo</p>
+                    <div class="flex items-center gap-2">
+                        <button id="record-btn" class="bg-blue-600 w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center text-xl shadow-lg">🎤</button>
+                        <input type="text" id="text-input" placeholder="Escribe aquí..." class="flex-grow bg-slate-900 border border-slate-800 rounded-full px-4 py-3 text-sm outline-none text-white">
+                        <button id="send-btn" class="bg-slate-800 w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center text-lg">🚀</button>
+                    </div>
                 </div>
             </footer>
         </div>
 
         <div id="view-library" class="flex flex-col flex-grow overflow-hidden hidden">
-            <div class="p-4 flex gap-2 overflow-x-auto border-b border-slate-900">
-                <button onclick="loadText(1)" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold">Texto 1</button>
-                <button onclick="loadText(2)" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold">Texto 2</button>
-                <button onclick="loadText(3)" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold">Texto 3</button>
+            <div class="p-4 flex gap-2 overflow-x-auto no-scrollbar border-b border-slate-900 bg-slate-900/20">
+                <button onclick="loadText(1)" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap">📜 Constancia</button>
+                <button onclick="loadText(2)" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap">📜 Entrevista</button>
+                <button onclick="loadText(3)" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap">📜 Viajes</button>
             </div>
-            <div id="text-display" class="flex-grow overflow-y-auto p-6 leading-relaxed text-slate-300 text-base" onmouseup="handleWordSelection()">
-                Selecciona un texto para empezar a leer. Haz doble clic en cualquier palabra que no entiendas para guardarla.
+            <div id="text-display" class="flex-grow overflow-y-auto p-6 leading-relaxed text-slate-300 text-base select-text" onmouseup="handleWordSelection()">
+                Selecciona un texto arriba. Haz clic y arrastra para marcar una palabra difícil.
             </div>
             <div class="p-4 bg-slate-900/50 border-t border-slate-900">
-                <h4 class="text-[10px] text-slate-500 uppercase tracking-widest mb-2 font-bold">Mi Vocabulario:</h4>
-                <div id="vocab-list" class="flex flex-wrap gap-2 text-[10px]">
-                    </div>
+                <h4 class="text-[10px] text-slate-500 uppercase tracking-widest mb-2 font-bold">Palabras para practicar:</h4>
+                <div id="vocab-list" class="flex flex-wrap gap-2 text-[10px]"></div>
             </div>
         </div>
     </div>
 
     <script>
-        // --- TEXTOS DE PRUEBA ---
         const TEXTS = {
-            1: "El aprendizaje de idiomas requiere constancia. Es fundamental sumergirse en la cultura y hablar sin miedo a cometer errores. Muchos estudiantes se sienten entusiasmados al principio, pero el verdadero desafío es mantener el presupuesto de tiempo diario.",
-            2: "En una entrevista de trabajo, la comunicación no verbal es tan importante como tus palabras. Debes mostrarte seguro, con una postura abierta y responder con entusiasmo. No olvides investigar la empresa antes de la cita.",
-            3: "Viajar al extranjero es la mejor forma de practicar. Al llegar al hotel, es común confirmar los detalles del alojamiento y preguntar por el presupuesto de las excursiones locales. Disfrutar de la gastronomía es un plus."
+            1: "El aprendizaje de idiomas requiere constancia. Es fundamental sumergirse en la cultura y hablar sin miedo a cometer errores. Muchos estudiantes se sienten entusiasmados al principio, pero el desafío es mantener el presupuesto de tiempo.",
+            2: "En una entrevista de trabajo, la comunicación no verbal es vital. Debes mostrarte seguro, con una postura abierta y responder con entusiasmo. No olvides investigar la empresa antes de la cita.",
+            3: "Viajar al extranjero es la mejor práctica. Al llegar al hotel, es común confirmar el alojamiento y preguntar por el presupuesto de las excursiones locales. La gastronomía es un valor añadido."
         };
 
         const SCENARIOS = {
             general: "Eres un tutor de español amable.",
-            entrevista: "Eres un reclutador en una empresa española.",
-            amigo: "Eres un amigo muy cercano que usa mucho slang."
+            entrevista: "Eres un reclutador exigente en una empresa española.",
+            amigo: "Eres un colega muy cercano que usa jerga y un tono relajado."
         };
 
-        // --- ESTADO GLOBAL ---
         let currentUser = localStorage.getItem('logged_user');
         let currentScenario = 'general';
-        let currentUtterance = null;
         let voices = [];
 
-        // --- INICIO ---
-        if (!currentUser) {
-            document.getElementById('auth-screen').classList.remove('hidden');
-        } else {
-            checkApiKey();
-            document.getElementById('user-display').innerText = `| ${currentUser}`;
+        // --- FLUJO DE CONTROL ---
+        function updateAppFlow() {
+            const authScreen = document.getElementById('auth-screen');
+            const setupScreen = document.getElementById('setup-screen');
+            const key = localStorage.getItem('groq_api_key');
+
+            if (!currentUser) {
+                authScreen.classList.remove('hidden');
+                return;
+            }
+            authScreen.classList.add('hidden');
+            document.getElementById('user-display').innerText = `Usuario: ${currentUser}`;
+
+            if (!key) {
+                setupScreen.classList.remove('hidden');
+                return;
+            }
+            setupScreen.classList.add('hidden');
             renderVocab();
         }
 
-        // --- AUTH ---
+        window.onload = updateAppFlow;
+
+        // --- AUTH & CONFIG ---
         function handleAuth() {
             const user = document.getElementById('auth-user').value.trim();
-            const pass = document.getElementById('auth-pass').value.trim();
-            if (user && pass) {
+            if (user) {
                 localStorage.setItem('logged_user', user);
-                location.reload();
-            }
-        }
-
-        function logout() {
-            localStorage.removeItem('logged_user');
-            location.reload();
-        }
-
-        function checkApiKey() {
-            if (!localStorage.getItem('groq_api_key')) {
-                document.getElementById('setup-screen').classList.remove('hidden');
+                currentUser = user;
+                updateAppFlow();
             }
         }
 
         function saveApiKey() {
             const key = document.getElementById('api-key-input').value.trim();
-            if (key) { localStorage.setItem('groq_api_key', key); location.reload(); }
+            if (key.startsWith('gsk_')) {
+                localStorage.setItem('groq_api_key', key);
+                updateAppFlow();
+            } else {
+                alert("Introduce una clave válida de Groq");
+            }
         }
+
+        function logout() { localStorage.removeItem('logged_user'); location.reload(); }
+        function resetApp() { localStorage.removeItem('groq_api_key'); location.reload(); }
 
         // --- NAVEGACIÓN ---
         function showTab(tab) {
@@ -153,47 +168,44 @@
             document.getElementById('tab-library-btn').classList.toggle('active', tab === 'library');
         }
 
-        // --- LECTURA Y VOCABULARIO ---
-        function loadText(id) {
-            document.getElementById('text-display').innerText = TEXTS[id];
-        }
+        // --- BIBLIOTECA ---
+        function loadText(id) { document.getElementById('text-display').innerText = TEXTS[id]; }
 
         function handleWordSelection() {
             const selection = window.getSelection().toString().trim();
-            if (selection && selection.length > 2 && selection.length < 20) {
-                if (confirm(`¿Guardar "${selection}" en tu vocabulario?`)) {
-                    saveWord(selection.toLowerCase());
+            if (selection && selection.length > 2 && selection.length < 25) {
+                if (confirm(`¿Añadir "${selection}" a tu base de datos?`)) {
+                    let vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}`) || "[]");
+                    if (!vocab.includes(selection.toLowerCase())) {
+                        vocab.push(selection.toLowerCase());
+                        localStorage.setItem(`vocab_${currentUser}`, JSON.stringify(vocab));
+                        renderVocab();
+                    }
                 }
             }
         }
 
-        function saveWord(word) {
-            let vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}`) || "[]");
-            if (!vocab.includes(word)) {
-                vocab.push(word);
-                localStorage.setItem(`vocab_${currentUser}`, JSON.stringify(vocab));
-                renderVocab();
-            }
-        }
-
         function renderVocab() {
-            let vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}`) || "[]");
+            const vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}`) || "[]");
             const container = document.getElementById('vocab-list');
-            container.innerHTML = vocab.map(w => `<span class="bg-blue-900/30 text-blue-400 px-2 py-1 rounded border border-blue-800/50">${w}</span>`).join('');
+            container.innerHTML = vocab.map(w => `<span class="bg-blue-900/40 text-blue-300 px-2 py-1 rounded border border-blue-800/50 capitalize">${w}</span>`).join('');
         }
 
-        // --- LÓGICA DE IA (CHAT) ---
+        // --- IA Y CHAT ---
         async function processWithGroq(text) {
             const key = localStorage.getItem('groq_api_key');
+            const statusText = document.getElementById('status');
             const vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}`) || "[]");
-            const randomVocab = vocab.sort(() => 0.5 - Math.random()).slice(0, 3);
+            const randomWords = vocab.sort(() => 0.5 - Math.random()).slice(0, 3);
 
-            document.getElementById('status').innerText = "Pensando...";
+            statusText.innerText = "Pensando...";
 
             const systemPrompt = `
-                Actúa como: ${SCENARIOS[currentScenario]}.
-                ESTRUCTURA: [CORRECCIÓN]: (Corta si hay error). [RESPUESTA]: (Breve, máx 30 palabras).
-                PALABRAS CLAVE: ${randomVocab.length > 0 ? "Intenta usar estas palabras de forma natural: " + randomVocab.join(", ") : "Sin palabras específicas."}
+                ${SCENARIOS[currentScenario]}
+                REGLAS:
+                1. Da una [CORRECCIÓN] breve si hay errores.
+                2. Responde al [DIÁLOGO] (máx 35 palabras).
+                3. RETO: Intenta usar estas palabras si es posible: ${randomWords.join(", ")}.
             `;
 
             try {
@@ -209,55 +221,63 @@
                 const aiMsg = data.choices[0].message.content;
                 addMessage(aiMsg, 'ai');
                 speak(aiMsg);
-            } catch (err) { addMessage("Error de conexión.", 'system'); }
-            finally { document.getElementById('status').innerText = "Listo"; }
+            } catch (err) { addMessage("Error en la conexión.", 'system'); }
+            finally { statusText.innerText = "Listo"; }
         }
 
-        // --- VOZ Y CONFIG ---
+        // --- VOZ ---
+        const voiceSelect = document.getElementById('voice-select');
         const speedSlider = document.getElementById('speed-slider');
         speedSlider.oninput = () => document.getElementById('speed-val').innerText = speedSlider.value + "x";
 
-        const voiceSelect = document.getElementById('voice-select');
         function loadVoices() {
             voices = window.speechSynthesis.getVoices();
             if (voices.length > 0) {
-                let filtered = voices.filter(v => v.lang.startsWith('es'));
-                voiceSelect.innerHTML = filtered.map(v => `<option value="${voices.indexOf(v)}">${v.name}</option>`).join('');
+                const es = voices.filter(v => v.lang.startsWith('es'));
+                voiceSelect.innerHTML = (es.length > 0 ? es : voices)
+                    .map(v => `<option value="${voices.indexOf(v)}">${v.name}</option>`).join('');
                 clearInterval(vInt);
             }
         }
         const vInt = setInterval(loadVoices, 300);
+        window.speechSynthesis.onvoiceschanged = loadVoices;
 
         function speak(text) {
             window.speechSynthesis.cancel();
-            currentUtterance = new SpeechSynthesisUtterance(text);
+            const utterance = new SpeechSynthesisUtterance(text);
             const vIdx = voiceSelect.value;
-            if (vIdx !== "" && voices[vIdx]) currentUtterance.voice = voices[vIdx];
-            currentUtterance.rate = parseFloat(speedSlider.value);
-            currentUtterance.lang = 'es-ES';
-            window.speechSynthesis.speak(currentUtterance);
+            if (vIdx !== "" && voices[vIdx]) utterance.voice = voices[vIdx];
+            utterance.rate = parseFloat(speedSlider.value);
+            utterance.lang = 'es-ES';
+            window.speechSynthesis.speak(utterance);
         }
 
-        // STT
         const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = Recognition ? new Recognition() : null;
         if (recognition) {
             recognition.lang = 'es-ES';
-            recognition.onresult = (e) => handleUserMessage(e.results[0][0].transcript);
+            recognition.onresult = (e) => {
+                const text = e.results[0][0].transcript;
+                handleUserMessage(text);
+            };
             recognition.onend = () => document.getElementById('record-btn').classList.remove('bg-red-600', 'animate-pulse');
         }
 
         document.getElementById('record-btn').onclick = () => {
             window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
-            recognition.start();
-            document.getElementById('record-btn').classList.add('bg-red-600', 'animate-pulse');
-            document.getElementById('status').innerText = "Escuchando...";
+            if (recognition) {
+                recognition.start();
+                document.getElementById('record-btn').classList.add('bg-red-600', 'animate-pulse');
+                document.getElementById('status').innerText = "Escuchando...";
+            }
         };
 
         document.getElementById('send-btn').onclick = () => {
-            const val = document.getElementById('text-input').value.trim();
-            if (val) { handleUserMessage(val); document.getElementById('text-input').value = ''; }
+            const input = document.getElementById('text-input');
+            const val = input.value.trim();
+            if (val) { handleUserMessage(val); input.value = ''; }
         };
+        document.getElementById('text-input').onkeydown = (e) => { if(e.key === 'Enter') document.getElementById('send-btn').click(); };
 
         function handleUserMessage(text) { addMessage(text, 'user'); processWithGroq(text); }
 
@@ -270,8 +290,9 @@
             };
             div.className = styles[type];
             div.innerText = text;
-            document.getElementById('chat-history').appendChild(div);
-            document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+            const history = document.getElementById('chat-history');
+            history.appendChild(div);
+            history.scrollTop = history.scrollHeight;
         }
 
         function setScenario(id) {
