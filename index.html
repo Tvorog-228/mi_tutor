@@ -3,137 +3,197 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Language Coach Pro</title>
+    <title>LanguageCoach Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); }
         .scenario-btn.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.2); }
+        .tab-btn.active { color: #3b82f6; border-bottom: 2px solid #3b82f6; }
+        .word-highlight:active { background: #3b82f6; color: white; border-radius: 4px; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-200 min-h-screen font-sans">
 
-    <div id="setup-screen" class="fixed inset-0 z-50 glass flex items-center justify-center p-6 hidden">
+    <div id="auth-screen" class="fixed inset-0 z-[60] bg-slate-950 flex items-center justify-center p-6 hidden">
         <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md shadow-2xl">
-            <h2 class="text-2xl font-bold text-white mb-2 text-center">Configuración</h2>
-            <input type="password" id="api-key-input" placeholder="Pega tu Groq Key aquí..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 mb-4 outline-none focus:border-blue-500 transition text-white text-center">
-            <button onclick="saveApiKey()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-blue-900/20">Empezar</button>
+            <h2 id="auth-title" class="text-2xl font-bold text-white mb-6 text-center">Bienvenido</h2>
+            <input type="text" id="auth-user" placeholder="Usuario" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 mb-3 outline-none focus:border-blue-500 text-white">
+            <input type="password" id="auth-pass" placeholder="Contraseña" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 mb-6 outline-none focus:border-blue-500 text-white">
+            <button onclick="handleAuth()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition mb-4">Entrar / Registrarse</button>
+            <p class="text-[10px] text-slate-500 text-center uppercase tracking-widest">Tus datos se guardan localmente</p>
         </div>
     </div>
 
-    <div class="flex flex-col h-screen max-w-lg mx-auto border-x border-slate-900 shadow-2xl bg-slate-950">
+    <div id="setup-screen" class="fixed inset-0 z-50 glass flex items-center justify-center p-6 hidden">
+        <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl w-full max-w-md shadow-2xl text-center">
+            <h2 class="text-xl font-bold text-white mb-2">Configuración Groq</h2>
+            <input type="password" id="api-key-input" placeholder="gsk_..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 mb-4 outline-none focus:border-blue-500 text-white text-center">
+            <button onclick="saveApiKey()" class="w-full bg-blue-600 py-3 rounded-xl font-bold">Guardar Key</button>
+        </div>
+    </div>
 
-        <header class="p-6 border-b border-slate-900 bg-slate-950/50">
-            <div class="flex justify-between items-center mb-4">
-                <div>
-                    <h1 class="text-xl font-bold text-blue-500 tracking-tight">LanguageCoach</h1>
-                    <p id="current-scenario-label" class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Modo: General</p>
-                </div>
-                <button onclick="resetApp()" class="text-[10px] bg-slate-900 px-3 py-1 rounded-full border border-slate-800 text-slate-500 hover:text-red-400 transition">Reset Key</button>
-            </div>
+    <div class="flex flex-col h-screen max-w-lg mx-auto border-x border-slate-900 bg-slate-950">
 
-            <div class="grid grid-cols-2 gap-4">
-                <div class="flex flex-col gap-1">
-                    <label class="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Voz de la IA:</label>
-                    <select id="voice-select" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-[10px] text-white outline-none focus:border-blue-500 transition appearance-none"></select>
-                </div>
-                <div class="flex flex-col gap-1">
-                    <label class="text-[9px] text-slate-500 uppercase font-bold tracking-widest text-right">Velocidad: <span id="speed-val">1.0</span>x</label>
-                    <input type="range" id="speed-slider" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500">
+        <header class="p-4 border-b border-slate-900 bg-slate-950/50 flex justify-between items-center">
+            <div>
+                <h1 class="text-lg font-bold text-blue-500">LanguageCoach <span class="text-[10px] text-slate-600" id="user-display"></span></h1>
+                <div class="flex gap-4 mt-2">
+                    <button onclick="showTab('chat')" class="tab-btn active text-xs font-bold uppercase tracking-widest pb-1" id="tab-chat-btn">Chat</button>
+                    <button onclick="showTab('library')" class="tab-btn text-xs font-bold uppercase tracking-widest pb-1" id="tab-library-btn">Biblioteca</button>
                 </div>
             </div>
+            <button onclick="logout()" class="text-[10px] text-slate-600 uppercase">Salir</button>
         </header>
 
-        <div class="p-3 flex gap-2 overflow-x-auto no-scrollbar border-b border-slate-900 bg-slate-950/30">
-            <button onclick="setScenario('general')" class="scenario-btn active whitespace-nowrap px-4 py-1.5 rounded-full border border-slate-800 text-[11px] font-medium transition" id="btn-general">🏠 General</button>
-            <button onclick="setScenario('entrevista')" class="scenario-btn whitespace-nowrap px-4 py-1.5 rounded-full border border-slate-800 text-[11px] font-medium transition" id="btn-entrevista">💼 Entrevista</button>
-            <button onclick="setScenario('amigo')" class="scenario-btn whitespace-nowrap px-4 py-1.5 rounded-full border border-slate-800 text-[11px] font-medium transition" id="btn-amigo">🍻 Amigo</button>
-            <button onclick="setScenario('viaje')" class="scenario-btn whitespace-nowrap px-4 py-1.5 rounded-full border border-slate-800 text-[11px] font-medium transition" id="btn-viaje">✈️ Viaje</button>
-        </div>
-
-        <main id="chat-history" class="flex-grow overflow-y-auto p-4 space-y-4 flex flex-col scroll-smooth">
-            <div class="bg-slate-900 text-slate-400 self-start p-3 rounded-2xl rounded-tl-none text-sm max-w-[85%] border border-slate-800 italic">
-                Hola. Configura la voz y velocidad arriba. Corregiré tus frases y seguiremos el diálogo.
-            </div>
-        </main>
-
-        <footer class="p-4 glass border-t border-slate-900">
-            <div class="flex flex-col gap-2">
-                <p id="status" class="text-[9px] text-slate-600 text-center uppercase tracking-widest h-3 font-bold">Listo</p>
+        <div id="view-chat" class="flex flex-col flex-grow overflow-hidden">
+            <div class="p-3 bg-slate-900/30 border-b border-slate-900 grid grid-cols-2 gap-2">
+                <select id="voice-select" class="bg-slate-800 text-[10px] p-1 rounded border border-slate-700 text-white outline-none"></select>
                 <div class="flex items-center gap-2">
-                    <button id="record-btn" class="bg-blue-600 hover:bg-blue-500 w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-xl shadow-lg active:scale-95 transition-all">🎤</button>
-                    <input type="text" id="text-input" placeholder="Escribe o usa el micro..." class="flex-grow bg-slate-900 border border-slate-800 rounded-full px-4 py-3 text-sm focus:border-blue-500 outline-none text-white transition">
-                    <button id="send-btn" class="bg-slate-800 hover:bg-slate-700 w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-lg active:scale-95 transition-all">🚀</button>
+                    <input type="range" id="speed-slider" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full h-1 bg-slate-800 rounded-lg appearance-none accent-blue-500">
+                    <span class="text-[10px] text-slate-500" id="speed-val">1.0x</span>
                 </div>
             </div>
-        </footer>
+            <div class="p-3 flex gap-2 overflow-x-auto no-scrollbar border-b border-slate-900">
+                <button onclick="setScenario('general')" class="scenario-btn active whitespace-nowrap px-3 py-1 rounded-full border border-slate-800 text-[10px] font-bold uppercase" id="btn-general">🏠 Gral</button>
+                <button onclick="setScenario('entrevista')" class="scenario-btn whitespace-nowrap px-3 py-1 rounded-full border border-slate-800 text-[10px] font-bold uppercase" id="btn-entrevista">💼 Trabajo</button>
+                <button onclick="setScenario('amigo')" class="scenario-btn whitespace-nowrap px-3 py-1 rounded-full border border-slate-800 text-[10px] font-bold uppercase" id="btn-amigo">🍻 Amigo</button>
+            </div>
+            <main id="chat-history" class="flex-grow overflow-y-auto p-4 space-y-4 flex flex-col scroll-smooth">
+                <div class="bg-slate-900 text-slate-400 self-start p-3 rounded-2xl text-xs border border-slate-800 italic">
+                    ¡Listo para practicar! Usaré las palabras que guardes en la biblioteca.
+                </div>
+            </main>
+            <footer class="p-4 glass border-t border-slate-900">
+                <div class="flex items-center gap-2">
+                    <button id="record-btn" class="bg-blue-600 w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-lg shadow-lg">🎤</button>
+                    <input type="text" id="text-input" placeholder="Escribe aquí..." class="flex-grow bg-slate-900 border border-slate-800 rounded-full px-4 py-2 text-sm outline-none text-white">
+                    <button id="send-btn" class="bg-slate-800 w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-lg">🚀</button>
+                </div>
+            </footer>
+        </div>
+
+        <div id="view-library" class="flex flex-col flex-grow overflow-hidden hidden">
+            <div class="p-4 flex gap-2 overflow-x-auto border-b border-slate-900">
+                <button onclick="loadText(1)" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold">Texto 1</button>
+                <button onclick="loadText(2)" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold">Texto 2</button>
+                <button onclick="loadText(3)" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold">Texto 3</button>
+            </div>
+            <div id="text-display" class="flex-grow overflow-y-auto p-6 leading-relaxed text-slate-300 text-base" onmouseup="handleWordSelection()">
+                Selecciona un texto para empezar a leer. Haz doble clic en cualquier palabra que no entiendas para guardarla.
+            </div>
+            <div class="p-4 bg-slate-900/50 border-t border-slate-900">
+                <h4 class="text-[10px] text-slate-500 uppercase tracking-widest mb-2 font-bold">Mi Vocabulario:</h4>
+                <div id="vocab-list" class="flex flex-wrap gap-2 text-[10px]">
+                    </div>
+            </div>
+        </div>
     </div>
 
     <script>
-        const SCENARIOS = {
-            general: "Tutor de idiomas amable.",
-            entrevista: "Reclutador de una empresa internacional.",
-            amigo: "Amigo cercano, usa slang y lenguaje relajado.",
-            viaje: "Recepcionista de hotel con problemas en tu reserva."
+        // --- TEXTOS DE PRUEBA ---
+        const TEXTS = {
+            1: "El aprendizaje de idiomas requiere constancia. Es fundamental sumergirse en la cultura y hablar sin miedo a cometer errores. Muchos estudiantes se sienten entusiasmados al principio, pero el verdadero desafío es mantener el presupuesto de tiempo diario.",
+            2: "En una entrevista de trabajo, la comunicación no verbal es tan importante como tus palabras. Debes mostrarte seguro, con una postura abierta y responder con entusiasmo. No olvides investigar la empresa antes de la cita.",
+            3: "Viajar al extranjero es la mejor forma de practicar. Al llegar al hotel, es común confirmar los detalles del alojamiento y preguntar por el presupuesto de las excursiones locales. Disfrutar de la gastronomía es un plus."
         };
 
+        const SCENARIOS = {
+            general: "Eres un tutor de español amable.",
+            entrevista: "Eres un reclutador en una empresa española.",
+            amigo: "Eres un amigo muy cercano que usa mucho slang."
+        };
+
+        // --- ESTADO GLOBAL ---
+        let currentUser = localStorage.getItem('logged_user');
         let currentScenario = 'general';
         let currentUtterance = null;
         let voices = [];
-        const apiKey = localStorage.getItem('groq_api_key');
 
-        const voiceSelect = document.getElementById('voice-select');
-        const speedSlider = document.getElementById('speed-slider');
-        const speedVal = document.getElementById('speed-val');
+        // --- INICIO ---
+        if (!currentUser) {
+            document.getElementById('auth-screen').classList.remove('hidden');
+        } else {
+            checkApiKey();
+            document.getElementById('user-display').innerText = `| ${currentUser}`;
+            renderVocab();
+        }
 
-        if (!apiKey) document.getElementById('setup-screen').classList.remove('hidden');
-
-        speedSlider.oninput = () => speedVal.innerText = speedSlider.value;
-
-        // --- GESTIÓN DE VOCES ---
-        function loadVoices() {
-            voices = window.speechSynthesis.getVoices();
-            if (voices.length > 0) {
-                let filtered = voices.filter(v => v.lang.startsWith('es'));
-                if (filtered.length === 0) filtered = voices;
-                voiceSelect.innerHTML = filtered.map(v => `<option value="${voices.indexOf(v)}">${v.name}</option>`).join('');
-                clearInterval(vInterval);
+        // --- AUTH ---
+        function handleAuth() {
+            const user = document.getElementById('auth-user').value.trim();
+            const pass = document.getElementById('auth-pass').value.trim();
+            if (user && pass) {
+                localStorage.setItem('logged_user', user);
+                location.reload();
             }
         }
-        const vInterval = setInterval(loadVoices, 250);
-        window.speechSynthesis.onvoiceschanged = loadVoices;
+
+        function logout() {
+            localStorage.removeItem('logged_user');
+            location.reload();
+        }
+
+        function checkApiKey() {
+            if (!localStorage.getItem('groq_api_key')) {
+                document.getElementById('setup-screen').classList.remove('hidden');
+            }
+        }
 
         function saveApiKey() {
             const key = document.getElementById('api-key-input').value.trim();
             if (key) { localStorage.setItem('groq_api_key', key); location.reload(); }
         }
 
-        function resetApp() { localStorage.removeItem('groq_api_key'); location.reload(); }
-
-        function setScenario(id) {
-            currentScenario = id;
-            document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(`btn-${id}`).classList.add('active');
-            document.getElementById('current-scenario-label').innerText = `Modo: ${id}`;
-            addMessage(`Escenario: ${id.toUpperCase()}`, 'system');
+        // --- NAVEGACIÓN ---
+        function showTab(tab) {
+            document.getElementById('view-chat').classList.toggle('hidden', tab !== 'chat');
+            document.getElementById('view-library').classList.toggle('hidden', tab !== 'library');
+            document.getElementById('tab-chat-btn').classList.toggle('active', tab === 'chat');
+            document.getElementById('tab-library-btn').classList.toggle('active', tab === 'library');
         }
 
-        const chatHistory = document.getElementById('chat-history');
-        const textInput = document.getElementById('text-input');
-        const statusText = document.getElementById('status');
+        // --- LECTURA Y VOCABULARIO ---
+        function loadText(id) {
+            document.getElementById('text-display').innerText = TEXTS[id];
+        }
 
+        function handleWordSelection() {
+            const selection = window.getSelection().toString().trim();
+            if (selection && selection.length > 2 && selection.length < 20) {
+                if (confirm(`¿Guardar "${selection}" en tu vocabulario?`)) {
+                    saveWord(selection.toLowerCase());
+                }
+            }
+        }
+
+        function saveWord(word) {
+            let vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}`) || "[]");
+            if (!vocab.includes(word)) {
+                vocab.push(word);
+                localStorage.setItem(`vocab_${currentUser}`, JSON.stringify(vocab));
+                renderVocab();
+            }
+        }
+
+        function renderVocab() {
+            let vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}`) || "[]");
+            const container = document.getElementById('vocab-list');
+            container.innerHTML = vocab.map(w => `<span class="bg-blue-900/30 text-blue-400 px-2 py-1 rounded border border-blue-800/50">${w}</span>`).join('');
+        }
+
+        // --- LÓGICA DE IA (CHAT) ---
         async function processWithGroq(text) {
             const key = localStorage.getItem('groq_api_key');
-            statusText.innerText = "Pensando...";
+            const vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}`) || "[]");
+            const randomVocab = vocab.sort(() => 0.5 - Math.random()).slice(0, 3);
 
-            // PROMPT DINÁMICO PARA CORRECCIÓN + DIÁLOGO CORTO
+            document.getElementById('status').innerText = "Pensando...";
+
             const systemPrompt = `
-                Actúa como: ${SCENARIOS[currentScenario]}
-                REGLAS DE RESPUESTA:
-                1. Estructura: [CORRECCIÓN]: (Si hay error gramatical en español, corrígelo brevemente. Si no, di "¡Perfecto!"). [RESPUESTA]: (Sigue el diálogo de forma muy breve y natural).
-                2. Sé conciso. Máximo 40 palabras en total.
-                3. Responde siempre en español.
+                Actúa como: ${SCENARIOS[currentScenario]}.
+                ESTRUCTURA: [CORRECCIÓN]: (Corta si hay error). [RESPUESTA]: (Breve, máx 30 palabras).
+                PALABRAS CLAVE: ${randomVocab.length > 0 ? "Intenta usar estas palabras de forma natural: " + randomVocab.join(", ") : "Sin palabras específicas."}
             `;
 
             try {
@@ -142,11 +202,7 @@
                     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
                     body: JSON.stringify({
                         model: "llama-3.3-70b-versatile",
-                        messages: [
-                            { role: "system", content: systemPrompt },
-                            { role: "user", content: text }
-                        ],
-                        temperature: 0.7
+                        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }]
                     })
                 });
                 const data = await response.json();
@@ -154,10 +210,35 @@
                 addMessage(aiMsg, 'ai');
                 speak(aiMsg);
             } catch (err) { addMessage("Error de conexión.", 'system'); }
-            finally { statusText.innerText = "Listo"; }
+            finally { document.getElementById('status').innerText = "Listo"; }
         }
 
-        // --- VOZ ---
+        // --- VOZ Y CONFIG ---
+        const speedSlider = document.getElementById('speed-slider');
+        speedSlider.oninput = () => document.getElementById('speed-val').innerText = speedSlider.value + "x";
+
+        const voiceSelect = document.getElementById('voice-select');
+        function loadVoices() {
+            voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                let filtered = voices.filter(v => v.lang.startsWith('es'));
+                voiceSelect.innerHTML = filtered.map(v => `<option value="${voices.indexOf(v)}">${v.name}</option>`).join('');
+                clearInterval(vInt);
+            }
+        }
+        const vInt = setInterval(loadVoices, 300);
+
+        function speak(text) {
+            window.speechSynthesis.cancel();
+            currentUtterance = new SpeechSynthesisUtterance(text);
+            const vIdx = voiceSelect.value;
+            if (vIdx !== "" && voices[vIdx]) currentUtterance.voice = voices[vIdx];
+            currentUtterance.rate = parseFloat(speedSlider.value);
+            currentUtterance.lang = 'es-ES';
+            window.speechSynthesis.speak(currentUtterance);
+        }
+
+        // STT
         const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = Recognition ? new Recognition() : null;
         if (recognition) {
@@ -168,44 +249,36 @@
 
         document.getElementById('record-btn').onclick = () => {
             window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
-            if(recognition) {
-                recognition.start();
-                document.getElementById('record-btn').classList.add('bg-red-600', 'animate-pulse');
-                statusText.innerText = "Escuchando...";
-            }
+            recognition.start();
+            document.getElementById('record-btn').classList.add('bg-red-600', 'animate-pulse');
+            document.getElementById('status').innerText = "Escuchando...";
         };
-
-        function speak(text) {
-            window.speechSynthesis.cancel();
-            currentUtterance = new SpeechSynthesisUtterance(text);
-
-            const vIdx = voiceSelect.value;
-            if (vIdx !== "" && voices[vIdx]) currentUtterance.voice = voices[vIdx];
-
-            currentUtterance.lang = 'es-ES';
-            currentUtterance.rate = parseFloat(speedSlider.value);
-            window.speechSynthesis.speak(currentUtterance);
-        }
 
         document.getElementById('send-btn').onclick = () => {
-            const val = textInput.value.trim();
-            if (val) { handleUserMessage(val); textInput.value = ''; }
+            const val = document.getElementById('text-input').value.trim();
+            if (val) { handleUserMessage(val); document.getElementById('text-input').value = ''; }
         };
-        textInput.onkeydown = (e) => { if (e.key === 'Enter') document.getElementById('send-btn').click(); };
 
         function handleUserMessage(text) { addMessage(text, 'user'); processWithGroq(text); }
 
         function addMessage(text, type) {
             const div = document.createElement('div');
             const styles = {
-                user: "bg-blue-600 text-white self-end p-3 rounded-2xl rounded-tr-none text-sm max-w-[85%] shadow-md",
-                ai: "bg-slate-900 text-slate-300 self-start p-3 rounded-2xl rounded-tl-none text-sm max-w-[85%] border border-slate-800 shadow-sm",
-                system: "bg-slate-800/50 text-slate-500 self-center text-[9px] py-1 px-4 rounded-full uppercase font-bold tracking-widest"
+                user: "bg-blue-600 text-white self-end p-3 rounded-2xl rounded-tr-none text-xs max-w-[85%] shadow-md",
+                ai: "bg-slate-900 text-slate-300 self-start p-3 rounded-2xl rounded-tl-none text-xs max-w-[85%] border border-slate-800",
+                system: "bg-slate-800/50 text-slate-500 self-center text-[9px] py-1 px-3 rounded-full uppercase font-bold"
             };
             div.className = styles[type];
             div.innerText = text;
-            chatHistory.appendChild(div);
-            chatHistory.scrollTop = chatHistory.scrollHeight;
+            document.getElementById('chat-history').appendChild(div);
+            document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+        }
+
+        function setScenario(id) {
+            currentScenario = id;
+            document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${id}`).classList.add('active');
+            addMessage(`Cambiando a modo: ${id}`, 'system');
         }
     </script>
 </body>
