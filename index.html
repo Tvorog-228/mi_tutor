@@ -244,44 +244,47 @@
 
         // --- IA ---
         async function processWithGroq(text) {
-    const key = localStorage.getItem('groq_api_key');
-    const langData = I18N[studyLang];
+          const key = localStorage.getItem('groq_api_key');
+          const langData = I18N[studyLang];
+          const vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}_${studyLang}`) || "[]");
 
-    document.getElementById('status').innerText = "...";
+          document.getElementById('status').innerText = "...";
 
-    // Nuevo Prompt: Sin etiquetas rígidas, más conversacional
-    const systemPrompt = `
-        Actúa como un tutor de ${studyLang === 'es' ? 'español' : 'inglés'} real y humano en un escenario de "${currentScenario}".
+          // PROMPT REINVENTADO: Más humano, más info, más preguntas
+          const systemPrompt = `
+              Eres un tutor de ${studyLang === 'es' ? 'español' : 'inglés'} experto y con mucha personalidad.
+              Tu objetivo es que el usuario hable lo máximo posible.
 
-        INSTRUCCIONES DE ESTILO:
-        1. No uses etiquetas como [CORRECTION] o [DIALOGUE].
-        2. Si el usuario comete un error, menciónalo de forma natural al principio (ej: "Se dice X, no Y...") y luego sigue con la charla.
-        3. Si no hay errores, responde directamente como lo haría un amigo o un profesor amable.
-        4. No uses la sección de retos (CHALLENGE).
-        5. Mantén tus respuestas cortas y animadas (máximo 30 palabras).
-        6. Si el usuario tiene palabras guardadas en su vocabulario: [${JSON.parse(localStorage.getItem(`vocab_${currentUser}_${studyLang}`) || "[]").join(", ")}], intenta meter alguna en la charla solo si encaja perfectamente.
-    `;
+              REGLAS DE ORO:
+              1. NUNCA uses etiquetas como [CORRECTION], [DIALOGUE] o [CHALLENGE]. Escribe como una persona normal.
+              2. EXPANDE la conversación: No respondas solo "Hola". Si el usuario dice "Hello", responde algo como: "¡Hola! Qué alegría verte por aquí. ¿Cómo ha ido tu día? ¿Has tenido oportunidad de practicar algo de inglés hoy o quieres que hablemos de algún tema en especial?".
+              3. CORRECCIÓN FLUIDA: Si el usuario comete un error, menciónalo con naturalidad (ej: "Por cierto, recuerda que es 'I am' y no 'I is'... pero bueno, volviendo a lo que decías...").
+              4. TERMINA SIEMPRE CON UNA PREGUNTA: Obliga al usuario a seguir la charla.
+              5. VOCABULARIO: Si el usuario tiene estas palabras guardadas: [${vocab.join(", ")}], intenta usarlas tú en tus explicaciones para que vea cómo se aplican.
+              6. TONO: ${currentScenario === 'amigo' ? 'Muy informal y divertido.' : 'Profesional pero cercano y motivador.'}
+          `;
 
-    try {
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-            body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
-                messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }]
-            })
-        });
-        const data = await response.json();
-        const aiMsg = data.choices[0].message.content;
-        addMessage(aiMsg, 'ai');
-        speak(aiMsg);
-    } catch (err) {
-        addMessage(studyLang === 'es' ? "Error de conexión." : "Connection error.", 'system');
-    } finally {
-        document.getElementById('status').innerText = langData.status;
+          try {
+              const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                  body: JSON.stringify({
+                      model: "llama-3.3-70b-versatile",
+                      messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }]
+                  })
+              });
+              const data = await response.json();
+              const aiMsg = data.choices[0].message.content;
+              addMessage(aiMsg, 'ai');
+              speak(aiMsg);
+          } catch (err) {
+              addMessage(studyLang === 'es' ? "Error de conexión." : "Connection error.", 'system');
+          } finally {
+              document.getElementById('status').innerText = langData.status;
+          }
     }
-}
         // --- VOZ ---
+
         function loadVoices() {
             voices = window.speechSynthesis.getVoices();
             const voiceSelect = document.getElementById('voice-select');
