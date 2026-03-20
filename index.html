@@ -106,7 +106,7 @@
     </div>
 
     <script>
-        // --- TRADUCCIONES E INTERFAZ ---
+        // --- TRADUCCIONES ---
         const I18N = {
             es: {
                 welcome: "¡Hola! Soy tu tutor personal. ¿Cómo estás hoy? Cuéntame cualquier cosa, estoy aquí para charlar y ayudarte a mejorar.",
@@ -138,15 +138,54 @@
             }
         };
 
-        // --- VARIABLES GLOBALES ---
+        // --- GLOBALS ---
         let currentUser = localStorage.getItem('logged_user');
         let studyLang = localStorage.getItem('study_lang') || 'es';
         let currentScenario = 'general';
         let voices = [];
-        let conversationHistory = []; // Memoria de la sesión
-        const MAX_HISTORY = 8; // Últimos 8 mensajes para contexto
+        let conversationHistory = [];
+        const MAX_HISTORY = 8;
 
-        // --- FLUJO DE CONTROL ---
+        // --- VOICE ENGINE FIXES ---
+        function loadVoices() {
+            let availableVoices = window.speechSynthesis.getVoices();
+            if (availableVoices.length === 0) return;
+
+            voices = availableVoices;
+            const voiceSelect = document.getElementById('voice-select');
+            const prefix = studyLang === 'es' ? 'es' : 'en';
+
+            let filtered = voices.filter(v => v.lang.toLowerCase().startsWith(prefix));
+            const displayList = filtered.length > 0 ? filtered : voices;
+
+            voiceSelect.innerHTML = displayList
+                .map(v => `<option value="${voices.indexOf(v)}">${v.name} (${v.lang.split('-')[0]})</option>`)
+                .join('');
+        }
+
+        // Chrome/Edge async loading fix
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        setTimeout(loadVoices, 500);
+
+        function speak(text) {
+            if (!text) return;
+            window.speechSynthesis.cancel(); // Stop current
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            const vIdx = document.getElementById('voice-select').value;
+
+            if (vIdx !== "" && voices[vIdx]) utterance.voice = voices[vIdx];
+
+            utterance.rate = parseFloat(document.getElementById('speed-slider').value) || 1.0;
+            utterance.lang = studyLang === 'es' ? 'es-ES' : 'en-US';
+
+            // Bug fix for long texts in Chrome
+            utterance.onend = () => { window.speechSynthesis.cancel(); };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // --- APP FLOW ---
         function updateAppFlow() {
             if (!currentUser) { document.getElementById('auth-screen').classList.remove('hidden'); return; }
             document.getElementById('auth-screen').classList.add('hidden');
@@ -159,6 +198,7 @@
 
             applyLanguageUI();
             if (conversationHistory.length === 0) {
+                // No auto-speak on welcome to avoid browser blocking audio
                 addMessage(I18N[studyLang].welcome, 'ai');
             }
             renderVocab();
@@ -182,14 +222,12 @@
 
             const btnCont = document.getElementById('text-buttons');
             btnCont.innerHTML = lang.texts.map((t, i) => `<button onclick="loadText(${i})" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap">${t}</button>`).join('');
-            document.getElementById('text-display').innerText = studyLang === 'es' ? "Selecciona un texto arriba para empezar..." : "Select a text above to start...";
+            document.getElementById('text-display').innerText = studyLang === 'es' ? "Selecciona un texto..." : "Select a text...";
 
             loadVoices();
         }
 
-        window.onload = updateAppFlow;
-
-        // --- GESTIÓN DE MEMORIA Y ESTADO ---
+        // --- HANDLERS ---
         function handleAuth() {
             const user = document.getElementById('auth-user').value.trim();
             if (user) { localStorage.setItem('logged_user', user); currentUser = user; updateAppFlow(); }
@@ -207,27 +245,17 @@
             addMessage(I18N[studyLang].welcome, 'ai');
         }
 
-        // --- LÓGICA DE IA (GROQ) ---
+        // --- GROQ IA ---
         async function processWithGroq(text) {
             const key = localStorage.getItem('groq_api_key');
             const vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}_${studyLang}`) || "[]");
 
-            // Guardamos mensaje del usuario en memoria
             conversationHistory.push({ role: "user", content: text });
             if (conversationHistory.length > MAX_HISTORY) conversationHistory.shift();
 
-            document.getElementById('status').innerText = "...";
+            document.getElementById('status').innerText = "Typing...";
 
-            const systemPrompt = `
-                Eres un tutor de ${studyLang === 'es' ? 'español' : 'inglés'} humano, empático y muy conversacional.
-                Escenario: "${currentScenario}".
-                OBJETIVO: Mantén una charla fluida, interesante y educativa.
-                REGLAS:
-                1. NO uses etiquetas como [CORRECTION] o [DIALOGUE]. Escribe como una persona real.
-                2. Si hay errores, corrígelos con amabilidad dentro de la charla (ej: "Ah, por cierto, se dice 'X'... pero bueno, ¡cuéntame más!").
-                3. Da respuestas ricas en información (2-3 frases) y TERMINA SIEMPRE CON UNA PREGUNTA para que el usuario siga hablando.
-                4. Vocabulario del usuario: [${vocab.join(", ")}]. Si puedes, usa alguna de estas palabras de forma natural para que el usuario vea cómo se aplican.
-            `;
+            const systemPrompt = `Eres un tutor de ${studyLang === 'es' ? 'español' : 'inglés'} humano y empático. Escenario: "${currentScenario}". OBJETIVO: Charla fluida. REGLAS: 1. Sin etiquetas. 2. Corrige errores con amabilidad. 3. Termina siempre con una pregunta. 4. Usa este vocabulario: [${vocab.join(", ")}].`;
 
             try {
                 const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -241,43 +269,56 @@
                 const data = await response.json();
                 const aiMsg = data.choices[0].message.content;
 
-                // Guardamos respuesta de IA en memoria
                 conversationHistory.push({ role: "assistant", content: aiMsg });
-
                 addMessage(aiMsg, 'ai');
                 speak(aiMsg);
             } catch (err) { addMessage("Error de conexión.", 'system'); }
             finally { document.getElementById('status').innerText = I18N[studyLang].status; }
         }
 
-        // --- FUNCIONES AUXILIARES (VOZ, BIBLIOTECA, UI) ---
-        function loadVoices() {
-            voices = window.speechSynthesis.getVoices();
-            const voiceSelect = document.getElementById('voice-select');
-            const prefix = studyLang === 'es' ? 'es' : 'en';
-            const filtered = voices.filter(v => v.lang.startsWith(prefix));
-            voiceSelect.innerHTML = (filtered.length > 0 ? filtered : voices)
-                .map(v => `<option value="${voices.indexOf(v)}">${v.name}</option>`).join('');
-        }
-        window.speechSynthesis.onvoiceschanged = loadVoices;
+        // --- CHAT UI ---
+        function addMessage(t, type) {
+            const div = document.createElement('div');
+            const styles = {
+                user: "bg-blue-600 text-white self-end p-3 rounded-2xl rounded-tr-none text-xs max-w-[85%] shadow-lg",
+                ai: "bg-slate-900 text-slate-200 self-start p-3 rounded-2xl rounded-tl-none text-xs max-w-[85%] border border-slate-800 cursor-pointer",
+                system: "bg-slate-800/50 text-slate-500 self-center text-[9px] py-1 px-3 rounded-full uppercase font-bold"
+            };
+            div.className = styles[type] + " animate-in fade-in slide-in-from-bottom-2 duration-300";
+            div.innerText = t;
 
-        function speak(text) {
-            window.speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance(text);
-            const vIdx = document.getElementById('voice-select').value;
-            if (vIdx !== "" && voices[vIdx]) u.voice = voices[vIdx];
-            u.rate = parseFloat(document.getElementById('speed-slider').value);
-            u.lang = studyLang === 'es' ? 'es-ES' : 'en-US';
-            window.speechSynthesis.speak(u);
+            // Re-speak on click for AI messages
+            if (type === 'ai') div.onclick = () => speak(t);
+
+            const h = document.getElementById('chat-history');
+            h.appendChild(div);
+            h.scrollTo({ top: h.scrollHeight, behavior: 'smooth' });
         }
 
+        // --- INPUTS ---
+        document.getElementById('send-btn').onclick = () => {
+            const i = document.getElementById('text-input');
+            const val = i.value.trim();
+            if (val) { addMessage(val, 'user'); processWithGroq(val); i.value = ''; }
+        };
+        document.getElementById('text-input').onkeydown = (e) => { if(e.key === 'Enter') document.getElementById('send-btn').click(); };
+
+        // Speed slider UI update
+        document.getElementById('speed-slider').oninput = (e) => {
+            document.getElementById('speed-val').innerText = e.target.value + 'x';
+        };
+
+        // STT (Speech to Text)
         const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const rec = Recognition ? new Recognition() : null;
         if (rec) {
-            rec.onresult = (e) => handleUserMessage(e.results[0][0].transcript);
+            rec.onresult = (e) => {
+                const t = e.results[0][0].transcript;
+                addMessage(t, 'user');
+                processWithGroq(t);
+            };
             rec.onend = () => document.getElementById('record-btn').classList.remove('bg-red-600', 'animate-pulse');
         }
-
         document.getElementById('record-btn').onclick = () => {
             if (rec) {
                 rec.lang = studyLang === 'es' ? 'es-ES' : 'en-US';
@@ -286,38 +327,14 @@
             }
         };
 
-        document.getElementById('send-btn').onclick = () => {
-            const i = document.getElementById('text-input');
-            const val = i.value.trim();
-            if (val) { handleUserMessage(val); i.value = ''; }
-        };
-        document.getElementById('text-input').onkeydown = (e) => { if(e.key === 'Enter') document.getElementById('send-btn').click(); };
-
-        function handleUserMessage(t) { addMessage(t, 'user'); processWithGroq(t); }
-
-        function addMessage(t, type) {
-            const div = document.createElement('div');
-            const styles = {
-                user: "bg-blue-600 text-white self-end p-3 rounded-2xl rounded-tr-none text-xs max-w-[85%] shadow-lg",
-                ai: "bg-slate-900 text-slate-200 self-start p-3 rounded-2xl rounded-tl-none text-xs max-w-[85%] border border-slate-800",
-                system: "bg-slate-800/50 text-slate-500 self-center text-[9px] py-1 px-3 rounded-full uppercase font-bold"
-            };
-            div.className = styles[type] + " transition-all duration-300 animate-in fade-in slide-in-from-bottom-2";
-            div.innerText = t;
-            const h = document.getElementById('chat-history');
-            h.appendChild(div);
-            h.scrollTo({ top: h.scrollHeight, behavior: 'smooth' });
-        }
-
+        // --- LIBRARY & VOCAB ---
         function showTab(tab) {
             document.getElementById('view-chat').classList.toggle('hidden', tab !== 'chat');
             document.getElementById('view-library').classList.toggle('hidden', tab !== 'library');
             document.getElementById('tab-chat-btn').classList.toggle('active', tab === 'chat');
             document.getElementById('tab-library-btn').classList.toggle('active', tab === 'library');
         }
-
         function loadText(idx) { document.getElementById('text-display').innerText = I18N[studyLang].libraryTexts[idx]; }
-
         function handleWordSelection() {
             const s = window.getSelection().toString().trim();
             if (s && s.length > 2 && s.length < 20) {
@@ -331,19 +348,19 @@
                 }
             }
         }
-
         function renderVocab() {
             const v = JSON.parse(localStorage.getItem(`vocab_${currentUser}_${studyLang}`) || "[]");
             document.getElementById('vocab-list').innerHTML = v.map(w => `<span class="bg-blue-900/30 text-blue-400 px-2 py-1 rounded border border-blue-800/50 capitalize">${w}</span>`).join('');
         }
-
         function setScenario(id) {
             currentScenario = id;
             document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(`btn-${id}`).classList.add('active');
-            resetHistory(); // Limpiamos memoria para el nuevo contexto
+            resetHistory();
             addMessage(`Scenario: ${id}`, 'system');
         }
+
+        window.onload = updateAppFlow;
     </script>
 </body>
 </html>
