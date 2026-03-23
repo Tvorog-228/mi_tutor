@@ -208,62 +208,100 @@
 
         async function loadFullNews(newsUrl, title) {
             const display = document.getElementById('text-display');
-            display.innerHTML = `<div class="text-center mt-10 text-slate-400 animate-pulse not-prose">${studyLang === 'es' ? 'Maquetando el texto...' : 'Formatting text...'}</div>`;
+            const key = localStorage.getItem('groq_api_key');
+
+            if (!key) {
+                display.innerHTML = `<div class="text-red-400 not-prose">Por favor, conecta tu API Key de Groq en los ajustes para usar la limpieza por IA.</div>`;
+                return;
+            }
+
+            display.innerHTML = `<div class="text-center mt-10 text-slate-400 animate-pulse not-prose">
+                <span class="text-2xl block mb-2">🤖</span>
+                ${studyLang === 'es' ? 'La IA está limpiando la noticia por fragmentos...' : 'AI is cleaning the news in chunks...'}
+                <div id="ai-progress" class="text-xs mt-2 text-slate-500 font-mono">Iniciando lectura...</div>
+            </div>`;
 
             try {
-                // Pedimos el texto a Jina
-                const response = await fetch(`https://r.jina.ai/${newsUrl}`);
-                let fullText = await response.text();
+                // 1. Traer el texto bruto de Jina AI
+                const response = await fetch(`https://r.jina.ai/${newsUrl}`, { headers: { "Accept": "text/plain" } });
+                let rawText = await response.text();
 
-                // 1. Quitar cabecera inicial de Jina
-                if(fullText.includes("Markdown Content:")) {
-                    fullText = fullText.split("Markdown Content:")[1];
+                // 2. Trocear el texto en bloques de ~900 caracteres (sin romper párrafos)
+                const paragraphs = rawText.split('\n');
+                const chunks = [];
+                let currentChunk = "";
+
+                for (const p of paragraphs) {
+                    // Si el párrafo cabe en el bloque actual, lo añadimos
+                    if (currentChunk.length + p.length < 900) {
+                        currentChunk += p + "\n";
+                    } else {
+                        // Si no cabe, guardamos el bloque actual y empezamos uno nuevo
+                        if (currentChunk.trim()) chunks.push(currentChunk.trim());
+                        currentChunk = p + "\n";
+                    }
                 }
+                if (currentChunk.trim()) chunks.push(currentChunk.trim());
 
-                // --- 2. SÚPER LIMPIEZA DE BASURA (REGEX) ---
+                // Ponemos un límite de 10 bloques (9000 caracteres) para no gastar toda tu cuota de Groq de golpe
+                const maxChunks = Math.min(chunks.length, 10);
+                let finalCleanText = "";
 
-                // A. Eliminar imágenes de Markdown estándar: ![texto](url) o ![texto]
-                fullText = fullText.replace(/!\[.*?\](?:\(.*?\))?/g, '');
+                // 3. El Prompt maestro para el filtro
+                const systemPrompt = `
+                    Eres un filtro estricto de artículos web. Recibes un fragmento de unos 900 caracteres.
+                    REGLA 1: Extrae SOLO el contenido real del artículo. Mantén el formato Markdown (negritas, subtítulos).
+                    REGLA 2: Ignora publicidad, menús, "TL;DR", "Read more", "Related Articles", biografías, o comentarios.
+                    REGLA 3: Si el fragmento entero es BASURA (solo menús, anuncios o metadatos), debes responder ÚNICAMENTE con la palabra: EMPTY_CHUNK
+                    REGLA 4: No saludes, no expliques lo que has hecho, devuelve solo el texto limpio o EMPTY_CHUNK.
+                `;
 
-                // B. Eliminar etiquetas raras de Jina (ej. "!Image 1", "Image:", "[Image]")
-                fullText = fullText.replace(/!?\[?Image.*?\]?/gi, '');
+                // 4. Procesar cada bloque con Groq (uno por uno para evitar Rate Limits)
+                for (let i = 0; i < maxChunks; i++) {
+                    document.getElementById('ai-progress').innerText = `Analizando bloque ${i + 1} de ${maxChunks}...`;
 
-                // C. Convertir enlaces de Markdown en texto normal: [Texto](http...) -> Texto
-                fullText = fullText.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+                    const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                        body: JSON.stringify({
+                            model: "llama-3.3-70b-versatile",
+                            temperature: 0.1, // Súper bajo para que sea estricto y no invente
+                            messages: [
+                                { role: "system", content: systemPrompt },
+                                { role: "user", content: chunks[i] }
+                            ]
+                        })
+                    });
 
-                // D. Destruir cualquier URL cruda que haya quedado suelta (http:// o https://)
-                fullText = fullText.replace(/https?:\/\/[^\s]+/g, '');
+                    const groqData = await groqResponse.json();
+                    if (groqData.error) throw new Error(groqData.error.message);
 
-                // E. Cortar el final del archivo (Publicidad, menús, recomendaciones)
-                const cutoffs = [
-                    "Related Topics", "Suscríbete", "Te puede interesar", "Lee también",
-                    "Popular Reads", "Sponsored Content", "Cookie List", "Listen to this article",
-                    "ABOUT THE AUTHOR", "Read more:", "ADVERTISEMENT", "Share on",
-                    "Sign up for", "Download our", "All rights reserved"
-                ];
-                for (const cutoff of cutoffs) {
-                    if (fullText.includes(cutoff)) {
-                        fullText = fullText.split(cutoff)[0];
+                    const cleanedChunk = groqData.choices[0].message.content.trim();
+
+                    // Si Groq determina que el bloque tiene valor (no es EMPTY_CHUNK), lo añadimos al resultado final
+                    if (cleanedChunk && !cleanedChunk.includes("EMPTY_CHUNK")) {
+                        finalCleanText += cleanedChunk + "\n\n";
                     }
                 }
 
-                // F. Limpiar saltos de línea gigantes (si hay 3 o más enter seguidos, lo deja en 2)
-                fullText = fullText.replace(/\n{3,}/g, '\n\n');
+                // 5. Convertir a HTML bonito con marked.js y renderizar
+                if (!finalCleanText.trim()) {
+                    finalCleanText = "La IA no pudo rescatar texto útil de esta URL. Puede ser un muro de pago o una página protegida.";
+                }
 
-                // 3. LA MAGIA: Convertimos ese Markdown hiper-limpio en HTML usando marked.js
-                const htmlContent = marked.parse(fullText.trim());
+                const htmlContent = marked.parse(finalCleanText);
 
-                // 4. Lo inyectamos en la pantalla
                 display.innerHTML = `
                     <h1 class="border-b border-slate-700 pb-4 mb-6">${title}</h1>
                     ${htmlContent}
                 `;
                 display.scrollTop = 0;
+
             } catch (err) {
-                display.innerHTML = `<div class="text-red-400 not-prose">Error al leer la noticia. Intenta con otra.</div>`;
+                console.error(err);
+                display.innerHTML = `<div class="text-red-400 not-prose">Error en la IA: ${err.message || 'Intenta con otra noticia.'}</div>`;
             }
         }
-
         // --- FLUJO Y RESTO DE LA APP (SIN CAMBIOS) ---
         function updateAppFlow() {
             if (!currentUser) { document.getElementById('auth-screen').classList.remove('hidden'); return; }
