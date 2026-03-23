@@ -166,28 +166,43 @@
         }
 
         async function fetchNews() {
-            const apiKey = "50e93b587c694d7fb3f9139712da094e";
-            const lang = studyLang === 'es' ? 'es' : 'en';
-            const query = studyLang === 'es' ? 'noticias' : 'news';
-
-            const targetUrl = `https://newsapi.org/v2/everything?q=${query}&language=${lang}&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
-            const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+            // URL del feed de MIT Technology Review
+            const feedUrl = "https://www.technologyreview.com/feed/";
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(feedUrl)}`;
 
             const btnCont = document.getElementById('text-buttons');
-            btnCont.innerHTML = `<span class="text-xs text-slate-400 my-auto ml-2 animate-pulse">Consultando periódicos...</span>`;
+            btnCont.innerHTML = `<span class="text-xs text-slate-400 my-auto ml-2 animate-pulse">Conectando con MIT Tech Review...</span>`;
 
             try {
-                const response = await fetch(url);
+                const response = await fetch(proxyUrl);
                 const data = await response.json();
 
-                if (data.articles && data.articles.length > 0) {
-                    renderNewsButtons(data.articles);
-                    document.getElementById('text-display').innerHTML = `<div class="text-center mt-10 text-slate-500 not-prose">☝️ Toca un titular arriba para extraer el texto limpio.</div>`;
+                // El contenido viene como un string de XML dentro de data.contents
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(data.contents, "text/xml");
+                const items = xmlDoc.querySelectorAll("item");
+
+                if (items.length > 0) {
+                    btnCont.innerHTML = "";
+                    // Tomamos los últimos 8 artículos
+                    items.forEach((item, index) => {
+                        if (index > 7) return;
+
+                        const title = item.querySelector("title").textContent;
+                        const link = item.querySelector("link").textContent;
+
+                        const btn = document.createElement('button');
+                        btn.className = "bg-slate-800 hover:bg-blue-900 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shadow-md text-slate-300";
+                        btn.innerText = `🔬 ${title.substring(0, 30)}...`;
+                        btn.onclick = () => loadFullNews(link, title);
+                        btnCont.appendChild(btn);
+                    });
                 } else {
-                    btnCont.innerHTML = `<span class="text-xs text-red-400 my-auto ml-2">No hay resultados.</span>`;
+                    btnCont.innerHTML = `<span class="text-xs text-red-400 my-auto ml-2">No se pudieron cargar noticias.</span>`;
                 }
             } catch (err) {
-                btnCont.innerHTML = `<span class="text-xs text-red-400 my-auto ml-2">Error de conexión.</span>`;
+                console.error(err);
+                btnCont.innerHTML = `<span class="text-xs text-red-400 my-auto ml-2">Error de conexión al RSS.</span>`;
             }
         }
 
@@ -249,13 +264,17 @@
 
                 // 3. El Prompt maestro para el filtro
                 const systemPrompt = `
-                    Eres un filtro estricto de artículos web. Recibes un fragmento de unos 900 caracteres.
-                    REGLA 1: Extrae SOLO el contenido real del artículo. Mantén el formato Markdown (negritas, subtítulos).
-                    REGLA 2: Ignora publicidad, menús, "TL;DR", "Read more", "Related Articles", biografías, o comentarios.
-                    REGLA 3: Si el fragmento entero es BASURA (solo menús, anuncios o metadatos), debes responder ÚNICAMENTE con la palabra: EMPTY_CHUNK
-                    REGLA 4: No saludes, no expliques lo que has hecho, devuelve solo el texto limpio o EMPTY_CHUNK.
-                `;
+                    Eres un experto en curación de contenidos tecnológicos.
+                    Tu objetivo es limpiar un fragmento de un artículo de MIT Technology Review.
 
+                    INSTRUCCIONES:
+                    1. Mantén exclusivamente el cuerpo del artículo.
+                    2. Usa formato Markdown limpio: # para títulos, ## para subtítulos, ** para énfasis.
+                    3. ELIMINA: Menús de navegación, enlaces de "Suscríbete", publicidad, pies de página,
+                       redes sociales y avisos de cookies.
+                    4. IMPORTANTE: Si el fragmento contiene solo nombres de autores o fechas sin texto relevante, responde "EMPTY_CHUNK".
+                    5. No añadidas comentarios personales, solo devuelve el texto limpio.
+                `;
                 // 4. Procesar cada bloque con Groq (uno por uno para evitar Rate Limits)
                 for (let i = 0; i < maxChunks; i++) {
                     document.getElementById('ai-progress').innerText = `Analizando bloque ${i + 1} de ${maxChunks}...`;
