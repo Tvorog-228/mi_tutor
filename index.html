@@ -166,25 +166,32 @@
         }
 
         async function fetchNews() {
-            // URL del feed de MIT Technology Review
+            // Probamos con un proxy diferente que suele ser más rápido y estable
             const feedUrl = "https://www.technologyreview.com/feed/";
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(feedUrl)}`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(feedUrl)}`;
 
             const btnCont = document.getElementById('text-buttons');
-            btnCont.innerHTML = `<span class="text-xs text-slate-400 my-auto ml-2 animate-pulse">Conectando con MIT Tech Review...</span>`;
+            btnCont.innerHTML = `<span class="text-xs text-slate-400 my-auto ml-2 animate-pulse">Conectando con la fuente...</span>`;
 
             try {
                 const response = await fetch(proxyUrl);
-                const data = await response.json();
 
-                // El contenido viene como un string de XML dentro de data.contents
+                if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+
+                const xmlText = await response.text();
+
+                // Parsear el XML
                 const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(data.contents, "text/xml");
+                const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+                // Verificar si hay errores de parseo
+                const parseError = xmlDoc.getElementsByTagName("parsererror");
+                if (parseError.length > 0) throw new Error("Error al leer el formato del Feed");
+
                 const items = xmlDoc.querySelectorAll("item");
 
                 if (items.length > 0) {
                     btnCont.innerHTML = "";
-                    // Tomamos los últimos 8 artículos
                     items.forEach((item, index) => {
                         if (index > 7) return;
 
@@ -193,16 +200,24 @@
 
                         const btn = document.createElement('button');
                         btn.className = "bg-slate-800 hover:bg-blue-900 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shadow-md text-slate-300";
-                        btn.innerText = `🔬 ${title.substring(0, 30)}...`;
-                        btn.onclick = () => loadFullNews(link, title);
+                        // Limpiamos un poco el título por si trae etiquetas extrañas
+                        btn.innerText = `📰 ${title.replace(/<[^>]*>/g, '').substring(0, 30)}...`;
+                        btn.onclick = () => {
+                            primeSpeech(); // Para que Chrome permita el audio luego
+                            loadFullNews(link, title);
+                        };
                         btnCont.appendChild(btn);
                     });
                 } else {
-                    btnCont.innerHTML = `<span class="text-xs text-red-400 my-auto ml-2">No se pudieron cargar noticias.</span>`;
+                    btnCont.innerHTML = `<span class="text-xs text-orange-400 my-auto ml-2">No se encontraron artículos hoy.</span>`;
                 }
             } catch (err) {
-                console.error(err);
-                btnCont.innerHTML = `<span class="text-xs text-red-400 my-auto ml-2">Error de conexión al RSS.</span>`;
+                console.error("Detalle del error:", err);
+                btnCont.innerHTML = `
+                    <button onclick="fetchNews()" class="text-[10px] bg-red-900/20 text-red-400 px-3 py-1 rounded-lg border border-red-800">
+                        ⚠️ Error de conexión. Reintentar?
+                    </button>
+                `;
             }
         }
 
