@@ -109,36 +109,25 @@
         // --- TRADUCCIONES E INTERFAZ ---
         const I18N = {
             es: {
-                welcome: "¡Hola! Soy tu tutor personal. ¿Cómo estás hoy? Cuéntame cualquier cosa, estoy aquí para charlar y ayudarte a mejorar.",
+                welcome: "¡Hola! Soy tu tutor personal. ¿Cómo estás hoy?",
                 chat: "Chat", library: "Biblioteca", logout: "Salir", change: "Idioma",
                 setupTitle: "Clave Groq", setupBtn: "Conectar", status: "Listo",
                 inputPlaceholder: "Escribe un mensaje...", vocabTitle: "Palabras guardadas:",
                 confirmWord: "¿Añadir a tu vocabulario?",
-                texts: ["📜 Constancia", "📜 Trabajo", "📜 Viajes"],
                 scenarios: { general: "🏠 General", entrevista: "💼 Entrevista", amigo: "🍻 Colega" },
-                libraryTexts: [
-                    "El aprendizaje de idiomas requiere constancia. Es fundamental sumergirse en la cultura y hablar sin miedo a cometer errores.",
-                    "En una entrevista de trabajo, la comunicación no verbal es vital. Debes mostrarte seguro y responder con entusiasmo.",
-                    "Viajar al extranjero es la mejor práctica. Al llegar al hotel, confirma tu alojamiento y pregunta por lugares locales."
-                ]
+                libPrompt: "Buscando las mejores noticias de hoy en español..."
             },
             en: {
-                welcome: "Hi there! I'm your personal tutor. How are you doing today? Tell me anything, I'm here to chat and help you improve.",
+                welcome: "Hi there! I'm your personal tutor. How are you doing today?",
                 chat: "Chat", library: "Library", logout: "Logout", change: "Language",
                 setupTitle: "Groq API Key", setupBtn: "Connect", status: "Ready",
                 inputPlaceholder: "Type a message...", vocabTitle: "Saved Words:",
                 confirmWord: "Add to your vocabulary?",
-                texts: ["📜 Consistency", "📜 Interview", "📜 Travel"],
                 scenarios: { general: "🏠 General", entrevista: "💼 Interview", amigo: "🍻 Buddy" },
-                libraryTexts: [
-                    "Language learning requires consistency. It is essential to immerse yourself in the culture and speak without fear of mistakes.",
-                    "In a job interview, non-verbal communication is vital. You should show confidence and answer with enthusiasm.",
-                    "Traveling abroad is the best practice. When you arrive at the hotel, confirm your accommodation and ask about local places."
-                ]
+                libPrompt: "Fetching today's top news in English..."
             }
         };
 
-        // --- VARIABLES GLOBALES ---
         let currentUser = localStorage.getItem('logged_user');
         let studyLang = localStorage.getItem('study_lang') || 'es';
         let currentScenario = 'general';
@@ -147,7 +136,7 @@
         let conversationHistory = [];
         const MAX_HISTORY = 8;
 
-        // --- LÓGICA DE VOZ "INFALIBLE" ---
+        // --- LÓGICA DE VOZ ---
         function loadVoices() {
             voices = window.speechSynthesis.getVoices();
             if (voices.length > 0) {
@@ -163,10 +152,7 @@
         const vInterval = setInterval(loadVoices, 250);
         window.speechSynthesis.onvoiceschanged = loadVoices;
 
-        function primeSpeech() {
-            // Cebado para Safari y móviles: sonido vacío al hacer clic
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
-        }
+        function primeSpeech() { window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); }
 
         function speak(text) {
             if (!text) return;
@@ -183,21 +169,100 @@
             window.speechSynthesis.speak(currentUtterance);
         }
 
+        // --- LÓGICA DE NOTICIAS (NewsAPI + Jina AI + Proxy) ---
+        async function fetchNews() {
+            const apiKey = "50e93b587c694d7fb3f9139712da094e";
+            const lang = studyLang === 'es' ? 'es' : 'en';
+            const query = studyLang === 'es' ? 'noticias' : 'news';
+
+            // Usamos AllOrigins para que funcione sin problemas en el navegador (Bypass CORS)
+            const targetUrl = `https://newsapi.org/v2/everything?q=${query}&language=${lang}&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
+            const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+
+            const btnCont = document.getElementById('text-buttons');
+            btnCont.innerHTML = `<span class="text-xs text-slate-400 my-auto ml-2 animate-pulse">Consultando periódicos...</span>`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.articles && data.articles.length > 0) {
+                    renderNewsButtons(data.articles);
+                    document.getElementById('text-display').innerHTML = `<div class="text-center mt-10 text-slate-500">☝️ Toca un titular arriba para extraer el texto limpio.</div>`;
+                } else {
+                    btnCont.innerHTML = `<span class="text-xs text-red-400 my-auto ml-2">No hay resultados.</span>`;
+                }
+            } catch (err) {
+                console.error("NewsAPI Error:", err);
+                btnCont.innerHTML = `<span class="text-xs text-red-400 my-auto ml-2">Error de conexión con la prensa.</span>`;
+            }
+        }
+
+        function renderNewsButtons(articles) {
+            const btnCont = document.getElementById('text-buttons');
+            btnCont.innerHTML = "";
+
+            articles.forEach((art) => {
+                if(!art.title || art.title === "[Removed]") return;
+
+                const btn = document.createElement('button');
+                btn.className = "bg-slate-800 hover:bg-blue-900 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shadow-md text-slate-300";
+                btn.innerText = `📰 ${art.title.substring(0, 25)}...`;
+                btn.onclick = () => loadFullNews(art.url, art.title);
+                btnCont.appendChild(btn);
+            });
+        }
+
+        async function loadFullNews(newsUrl, title) {
+            const display = document.getElementById('text-display');
+            display.innerHTML = `<div class="text-center mt-10 text-slate-400 animate-pulse">${studyLang === 'es' ? 'Limpiando el texto con Inteligencia Artificial...' : 'Cleaning text with AI...'}</div>`;
+
+            try {
+                // Jina AI extrae el texto puro de la URL de NewsAPI
+                const response = await fetch(`https://r.jina.ai/${newsUrl}`);
+                let fullText = await response.text();
+
+                // --- FILTRO MAGICO PARA LIMPIAR BASURA ---
+                if(fullText.includes("Markdown Content:")) {
+                    fullText = fullText.split("Markdown Content:")[1]; // Quitar cabecera de Jina
+                }
+
+                // Quitar enlaces molestos de Markdown: [Texto](http...) -> Texto
+                fullText = fullText.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+
+                // Quitar imágenes rotas de Markdown
+                fullText = fullText.replace(/!\[.*?\]/g, '');
+
+                // Cortar si detectamos "basura" típica del final de las noticias
+                const cutoffs = ["Related Topics", "Suscríbete", "Te puede interesar", "Lee también", "Popular Reads", "Sponsored Content", "Cookie List"];
+                for (const cutoff of cutoffs) {
+                    if (fullText.includes(cutoff)) {
+                        fullText = fullText.split(cutoff)[0];
+                    }
+                }
+                // ----------------------------------------
+
+                display.innerHTML = `
+                    <h2 class="text-2xl font-bold text-white mb-6 not-italic border-b border-slate-800 pb-4">${title}</h2>
+                    <div class="whitespace-pre-wrap text-lg leading-relaxed text-slate-300 not-italic">${fullText.trim()}</div>
+                `;
+                display.scrollTop = 0;
+            } catch (err) {
+                display.innerHTML = `<div class="text-red-400">Error al leer la noticia. Intenta con otra.</div>`;
+            }
+        }
+
         // --- FLUJO DE CONTROL ---
         function updateAppFlow() {
             if (!currentUser) { document.getElementById('auth-screen').classList.remove('hidden'); return; }
             document.getElementById('auth-screen').classList.add('hidden');
-
             if (!localStorage.getItem('study_lang')) { document.getElementById('lang-screen').classList.remove('hidden'); return; }
             document.getElementById('lang-screen').classList.add('hidden');
-
             if (!localStorage.getItem('groq_api_key')) { document.getElementById('setup-screen').classList.remove('hidden'); return; }
             document.getElementById('setup-screen').classList.add('hidden');
 
             applyLanguageUI();
-            if (conversationHistory.length === 0) {
-                addMessage(I18N[studyLang].welcome, 'ai');
-            }
+            if (conversationHistory.length === 0) addMessage(I18N[studyLang].welcome, 'ai');
             renderVocab();
         }
 
@@ -216,38 +281,21 @@
             document.getElementById('btn-general').innerText = lang.scenarios.general;
             document.getElementById('btn-entrevista').innerText = lang.scenarios.entrevista;
             document.getElementById('btn-amigo').innerText = lang.scenarios.amigo;
+            document.getElementById('text-display').innerText = lang.libPrompt;
 
-            const btnCont = document.getElementById('text-buttons');
-            btnCont.innerHTML = lang.texts.map((t, i) => `<button onclick="loadText(${i})" class="bg-slate-800 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap">${t}</button>`).join('');
-            document.getElementById('text-display').innerText = studyLang === 'es' ? "Selecciona un texto arriba para empezar..." : "Select a text above to start...";
-
+            fetchNews();
             loadVoices();
         }
 
         window.onload = updateAppFlow;
 
         // --- GESTIÓN DE MEMORIA Y ESTADO ---
-        function handleAuth() {
-            primeSpeech();
-            const user = document.getElementById('auth-user').value.trim();
-            if (user) { localStorage.setItem('logged_user', user); currentUser = user; updateAppFlow(); }
-        }
-        function selectLanguage(l) {
-            primeSpeech();
-            localStorage.setItem('study_lang', l); studyLang = l; resetHistory(); location.reload();
-        }
+        function handleAuth() { primeSpeech(); const user = document.getElementById('auth-user').value.trim(); if (user) { localStorage.setItem('logged_user', user); currentUser = user; updateAppFlow(); } }
+        function selectLanguage(l) { primeSpeech(); localStorage.setItem('study_lang', l); studyLang = l; resetHistory(); location.reload(); }
         function changeLang() { localStorage.removeItem('study_lang'); location.reload(); }
         function logout() { localStorage.removeItem('logged_user'); location.reload(); }
-        function saveApiKey() {
-            primeSpeech();
-            const k = document.getElementById('api-key-input').value.trim();
-            if (k.startsWith('gsk_')) { localStorage.setItem('groq_api_key', k); updateAppFlow(); }
-        }
-        function resetHistory() {
-            conversationHistory = [];
-            document.getElementById('chat-history').innerHTML = "";
-            addMessage(I18N[studyLang].welcome, 'ai');
-        }
+        function saveApiKey() { primeSpeech(); const k = document.getElementById('api-key-input').value.trim(); if (k.startsWith('gsk_')) { localStorage.setItem('groq_api_key', k); updateAppFlow(); } }
+        function resetHistory() { conversationHistory = []; document.getElementById('chat-history').innerHTML = ""; addMessage(I18N[studyLang].welcome, 'ai'); }
 
         // --- LÓGICA DE IA (GROQ) ---
         async function processWithGroq(text) {
@@ -267,7 +315,7 @@
                 1. NO uses etiquetas como [CORRECTION] o [DIALOGUE]. Escribe como una persona real.
                 2. Si hay errores, corrígelos con amabilidad dentro de la charla (ej: "Ah, por cierto, se dice 'X'... pero bueno, ¡cuéntame más!").
                 3. Da respuestas ricas en información (2-3 frases) y TERMINA SIEMPRE CON UNA PREGUNTA para que el usuario siga hablando.
-                4. Vocabulario del usuario: [${vocab.join(", ")}]. Si puedes, usa alguna de estas palabras de forma natural para que el usuario vea cómo se aplican.
+                4. Vocabulario del usuario: [${vocab.join(", ")}]. Si puedes, usa alguna de estas palabras de forma natural.
             `;
 
             try {
@@ -291,32 +339,11 @@
 
         const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const rec = Recognition ? new Recognition() : null;
-        if (rec) {
-            rec.onresult = (e) => handleUserMessage(e.results[0][0].transcript);
-            rec.onend = () => document.getElementById('record-btn').classList.remove('bg-red-600', 'animate-pulse');
-        }
+        if (rec) { rec.onresult = (e) => handleUserMessage(e.results[0][0].transcript); rec.onend = () => document.getElementById('record-btn').classList.remove('bg-red-600', 'animate-pulse'); }
 
-        document.getElementById('record-btn').onclick = () => {
-            primeSpeech();
-            if (rec) {
-                rec.lang = studyLang === 'es' ? 'es-ES' : 'en-US';
-                rec.start();
-                document.getElementById('record-btn').classList.add('bg-red-600', 'animate-pulse');
-            }
-        };
-
-        document.getElementById('send-btn').onclick = () => {
-            primeSpeech();
-            const i = document.getElementById('text-input');
-            const val = i.value.trim();
-            if (val) { handleUserMessage(val); i.value = ''; }
-        };
-        document.getElementById('text-input').onkeydown = (e) => {
-            if(e.key === 'Enter') {
-                primeSpeech();
-                document.getElementById('send-btn').click();
-            }
-        };
+        document.getElementById('record-btn').onclick = () => { primeSpeech(); if (rec) { rec.lang = studyLang === 'es' ? 'es-ES' : 'en-US'; rec.start(); document.getElementById('record-btn').classList.add('bg-red-600', 'animate-pulse'); } };
+        document.getElementById('send-btn').onclick = () => { primeSpeech(); const i = document.getElementById('text-input'); const val = i.value.trim(); if (val) { handleUserMessage(val); i.value = ''; } };
+        document.getElementById('text-input').onkeydown = (e) => { if(e.key === 'Enter') { primeSpeech(); document.getElementById('send-btn').click(); } };
 
         function handleUserMessage(t) { addMessage(t, 'user'); processWithGroq(t); }
 
@@ -342,8 +369,6 @@
             document.getElementById('tab-library-btn').classList.toggle('active', tab === 'library');
         }
 
-        function loadText(idx) { document.getElementById('text-display').innerText = I18N[studyLang].libraryTexts[idx]; }
-
         function handleWordSelection() {
             const s = window.getSelection().toString().trim();
             if (s && s.length > 2 && s.length < 20) {
@@ -363,18 +388,8 @@
             document.getElementById('vocab-list').innerHTML = v.map(w => `<span class="bg-blue-900/30 text-blue-400 px-2 py-1 rounded border border-blue-800/50 capitalize">${w}</span>`).join('');
         }
 
-        function setScenario(id) {
-            primeSpeech();
-            currentScenario = id;
-            document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(`btn-${id}`).classList.add('active');
-            resetHistory();
-            addMessage(`Scenario: ${id}`, 'system');
-        }
-
-        document.getElementById('speed-slider').oninput = (e) => {
-            document.getElementById('speed-val').innerText = e.target.value + 'x';
-        };
+        function setScenario(id) { primeSpeech(); currentScenario = id; document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active')); document.getElementById(`btn-${id}`).classList.add('active'); resetHistory(); addMessage(`Scenario: ${id}`, 'system'); }
+        document.getElementById('speed-slider').oninput = (e) => { document.getElementById('speed-val').innerText = e.target.value + 'x'; };
     </script>
 </body>
 </html>
