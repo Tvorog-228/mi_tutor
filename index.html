@@ -232,7 +232,7 @@
             window.speechSynthesis.speak(utterance);
         }
 
-        // --- CORE DE LA APP --- comprobar voz
+        // --- CORE DE LA APP ---
         async function processWithGroq(text) {
             const key = localStorage.getItem('groq_api_key');
             const vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}_${studyLang}`) || "[]");
