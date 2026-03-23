@@ -211,35 +211,49 @@
             display.innerHTML = `<div class="text-center mt-10 text-slate-400 animate-pulse not-prose">${studyLang === 'es' ? 'Maquetando el texto...' : 'Formatting text...'}</div>`;
 
             try {
-                // Volvemos a pedir Markdown a Jina (es su comportamiento por defecto)
+                // Pedimos el texto a Jina
                 const response = await fetch(`https://r.jina.ai/${newsUrl}`);
                 let fullText = await response.text();
 
-                // 1. Limpieza inicial de Jina
+                // 1. Quitar cabecera inicial de Jina
                 if(fullText.includes("Markdown Content:")) {
                     fullText = fullText.split("Markdown Content:")[1];
                 }
 
-                // 2. Tijeras para las distracciones
-                // Eliminamos cualquier imagen de Markdown: ![texto](url)
-                fullText = fullText.replace(/!\[.*?\]\(.*?\)/g, '');
+                // --- 2. SÚPER LIMPIEZA DE BASURA (REGEX) ---
 
-                // Convertimos links en texto normal para que el alumno no haga clics por error
-                // Esto cambia [ABC News](https...) a simplemente ABC News
+                // A. Eliminar imágenes de Markdown estándar: ![texto](url) o ![texto]
+                fullText = fullText.replace(/!\[.*?\](?:\(.*?\))?/g, '');
+
+                // B. Eliminar etiquetas raras de Jina (ej. "!Image 1", "Image:", "[Image]")
+                fullText = fullText.replace(/!?\[?Image.*?\]?/gi, '');
+
+                // C. Convertir enlaces de Markdown en texto normal: [Texto](http...) -> Texto
                 fullText = fullText.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
 
-                // Cortamos el final del archivo donde suele estar la publi o sugerencias
-                const cutoffs = ["Related Topics", "Suscríbete", "Te puede interesar", "Lee también", "Popular Reads", "Sponsored Content", "Cookie List", "Listen to this article", "ABOUT THE AUTHOR", "Read more:"];
+                // D. Destruir cualquier URL cruda que haya quedado suelta (http:// o https://)
+                fullText = fullText.replace(/https?:\/\/[^\s]+/g, '');
+
+                // E. Cortar el final del archivo (Publicidad, menús, recomendaciones)
+                const cutoffs = [
+                    "Related Topics", "Suscríbete", "Te puede interesar", "Lee también",
+                    "Popular Reads", "Sponsored Content", "Cookie List", "Listen to this article",
+                    "ABOUT THE AUTHOR", "Read more:", "ADVERTISEMENT", "Share on",
+                    "Sign up for", "Download our", "All rights reserved"
+                ];
                 for (const cutoff of cutoffs) {
                     if (fullText.includes(cutoff)) {
                         fullText = fullText.split(cutoff)[0];
                     }
                 }
 
-                // 3. LA MAGIA: Convertimos ese Markdown ya limpio en HTML usando marked.js
+                // F. Limpiar saltos de línea gigantes (si hay 3 o más enter seguidos, lo deja en 2)
+                fullText = fullText.replace(/\n{3,}/g, '\n\n');
+
+                // 3. LA MAGIA: Convertimos ese Markdown hiper-limpio en HTML usando marked.js
                 const htmlContent = marked.parse(fullText.trim());
 
-                // 4. Lo inyectamos. Tailwind Typography hará que el H1, H2, ul, li, etc., se vean geniales.
+                // 4. Lo inyectamos en la pantalla
                 display.innerHTML = `
                     <h1 class="border-b border-slate-700 pb-4 mb-6">${title}</h1>
                     ${htmlContent}
