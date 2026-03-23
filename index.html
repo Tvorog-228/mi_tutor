@@ -89,7 +89,7 @@
                 <div class="flex flex-col gap-2">
                     <p id="status" class="text-[9px] text-slate-600 text-center uppercase tracking-widest h-3 font-bold">Ready</p>
                     <div class="flex items-center gap-2">
-                        <button id="record-btn" class="bg-blue-600 w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center text-xl shadow-lg">🎤</button>
+                        <button id="record-btn" class="bg-blue-600 w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center text-xl shadow-lg transition-all active:scale-90">🎤</button>
                         <input type="text" id="text-input" placeholder="..." class="flex-grow bg-slate-900 border border-slate-800 rounded-full px-4 py-3 text-sm outline-none text-white focus:border-blue-500 transition-all">
                         <button id="send-btn" class="bg-slate-800 w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center text-lg">🚀</button>
                     </div>
@@ -98,7 +98,7 @@
         </div>
 
         <div id="view-library" class="flex flex-col flex-grow overflow-hidden hidden">
-            <div id="text-buttons" class="p-4 flex gap-2 overflow-x-auto no-scrollbar border-b border-slate-900 bg-slate-900/20"></div>
+            <div id="text-buttons" class="p-4 flex gap-3 overflow-x-auto no-scrollbar border-b border-slate-900 bg-slate-900/20"></div>
 
             <div id="text-display" class="flex-grow overflow-y-auto p-6 select-text prose prose-invert prose-slate max-w-none" onmouseup="handleWordSelection()"></div>
 
@@ -118,7 +118,8 @@
                 inputPlaceholder: "Escribe un mensaje...", vocabTitle: "Palabras guardadas:",
                 confirmWord: "¿Añadir a tu vocabulario?",
                 scenarios: { general: "🏠 General", entrevista: "💼 Entrevista", amigo: "🍻 Colega" },
-                libPrompt: "Cargando tus lecturas aleatorias..."
+                libPrompt: "Cargando tus lecturas aleatorias...",
+                libLabel: "Lectura"
             },
             en: {
                 welcome: "Hi there! I'm your personal tutor. How are you doing today?",
@@ -127,7 +128,8 @@
                 inputPlaceholder: "Type a message...", vocabTitle: "Saved Words:",
                 confirmWord: "Add to your vocabulary?",
                 scenarios: { general: "🏠 General", entrevista: "💼 Interview", amigo: "🍻 Buddy" },
-                libPrompt: "Loading your random readings..."
+                libPrompt: "Loading your random readings...",
+                libLabel: "Reading"
             }
         };
 
@@ -135,84 +137,75 @@
         let studyLang = localStorage.getItem('study_lang') || 'es';
         let currentScenario = 'general';
         let voices = [];
-        let currentUtterance = null;
         let conversationHistory = [];
         const MAX_HISTORY = 8;
 
-        // --- LÓGICA DE LA BIBLIOTECA CON CSV ---
+        // --- REFUERZO DE RECONOCIMIENTO DE VOZ ---
+        const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const rec = Recognition ? new Recognition() : null;
 
+        if (rec) {
+            rec.continuous = false;
+            rec.interimResults = false;
+            rec.onresult = (e) => {
+                const text = e.results[0][0].transcript;
+                handleUserMessage(text);
+            };
+            rec.onend = () => {
+                document.getElementById('record-btn').classList.remove('bg-red-600', 'animate-pulse');
+                document.getElementById('status').innerText = I18N[studyLang].status;
+            };
+            rec.onerror = () => {
+                document.getElementById('record-btn').classList.remove('bg-red-600', 'animate-pulse');
+                document.getElementById('status').innerText = "Error Mic";
+            };
+        }
+
+        // --- LÓGICA DE BIBLIOTECA ---
         async function loadRandomLibraryFromCSV() {
             const btnCont = document.getElementById('text-buttons');
             const display = document.getElementById('text-display');
 
-            btnCont.innerHTML = `<span class="text-xs text-slate-400 animate-pulse">Buscando en news.csv...</span>`;
+            btnCont.innerHTML = `<span class="text-xs text-slate-400 animate-pulse italic">Escogiendo textos...</span>`;
 
-            // Usamos PapaParse para leer el archivo local
             Papa.parse("news.csv", {
                 download: true,
                 header: true,
                 skipEmptyLines: true,
                 complete: function(results) {
                     const allArticles = results.data;
-
                     if (allArticles.length === 0) {
-                        btnCont.innerHTML = `<span class="text-xs text-red-400">CSV vacío o no encontrado.</span>`;
+                        btnCont.innerHTML = `<span class="text-xs text-red-400">CSV vacío.</span>`;
                         return;
                     }
 
-                    // 1. Barajar el array de artículos
                     const shuffled = allArticles.sort(() => 0.5 - Math.random());
-
-                    // 2. Elegir 3 al azar
                     const selected = shuffled.slice(0, 3);
-
                     btnCont.innerHTML = "";
 
                     selected.forEach((art, index) => {
                         const btn = document.createElement('button');
-                        btn.className = "bg-slate-800 hover:bg-blue-900 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shadow-md text-slate-300";
+                        btn.className = "bg-slate-800 hover:bg-blue-900 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shadow-md text-slate-300 flex-shrink-0";
 
-                        // Seleccionamos la columna según el idioma de estudio
-                        // Asumimos que el CSV tiene columnas 'english' y 'spanish'
                         const content = studyLang === 'en' ? art.english : art.spanish;
+                        const label = I18N[studyLang].libLabel;
+                        const preview = content ? content.substring(0, 10).trim() : "...";
 
-                        // Título corto basado en el inicio del texto
-                        btn.innerText = `📖 Lectura ${index + 1}`;
+                        btn.innerHTML = `📖 ${label} ${index + 1}: <span class="text-slate-500 font-normal ml-1">${preview}...</span>`;
 
                         btn.onclick = () => {
-                            display.innerHTML = `
-                                <div class="prose prose-invert max-w-none">
-                                    ${marked.parse(content || "Contenido no disponible")}
-                                </div>
-                            `;
+                            display.innerHTML = `<div class="prose prose-invert max-w-none animate-in fade-in duration-500">${marked.parse(content || "")}</div>`;
                             display.scrollTop = 0;
                         };
                         btnCont.appendChild(btn);
                     });
 
-                    display.innerHTML = `<div class="text-center mt-10 text-slate-500 not-prose">Toca un botón arriba para leer uno de los 3 textos seleccionados en ${studyLang === 'es' ? 'Español' : 'Inglés'}.</div>`;
-                },
-                error: function(err) {
-                    btnCont.innerHTML = `<span class="text-xs text-red-400">Error al cargar news.csv</span>`;
-                    console.error(err);
+                    display.innerHTML = `<div class="text-center mt-10 text-slate-500 italic text-sm">Selección aleatoria lista. Toca un botón arriba.</div>`;
                 }
             });
         }
 
-        // Modificamos showTab para disparar la carga
-        function showTab(tab) {
-            document.getElementById('view-chat').classList.toggle('hidden', tab !== 'chat');
-            document.getElementById('view-library').classList.toggle('hidden', tab !== 'library');
-            document.getElementById('tab-chat-btn').classList.toggle('active', tab === 'chat');
-            document.getElementById('tab-library-btn').classList.toggle('active', tab === 'library');
-
-            if (tab === 'library') {
-                loadRandomLibraryFromCSV();
-            }
-        }
-
-        // --- RESTO DE FUNCIONES (SINTESIS, CHAT, ETC) ---
-
+        // --- FUNCIONES DE VOZ (TTS) ---
         function loadVoices() {
             voices = window.speechSynthesis.getVoices();
             if (voices.length > 0) {
@@ -231,22 +224,23 @@
         function speak(text) {
             if (!text) return;
             window.speechSynthesis.cancel();
-            currentUtterance = new SpeechSynthesisUtterance(text);
+            const utterance = new SpeechSynthesisUtterance(text);
             const vIdx = document.getElementById('voice-select').value;
-            if (vIdx !== "" && voices[vIdx]) currentUtterance.voice = voices[vIdx];
-            currentUtterance.lang = studyLang === 'es' ? 'es-ES' : 'en-US';
-            currentUtterance.rate = parseFloat(document.getElementById('speed-slider').value);
-            window.speechSynthesis.speak(currentUtterance);
+            if (vIdx !== "" && voices[vIdx]) utterance.voice = voices[vIdx];
+            utterance.lang = studyLang === 'es' ? 'es-ES' : 'en-US';
+            utterance.rate = parseFloat(document.getElementById('speed-slider').value);
+            window.speechSynthesis.speak(utterance);
         }
 
+        // --- CORE DE LA APP ---
         async function processWithGroq(text) {
             const key = localStorage.getItem('groq_api_key');
             const vocab = JSON.parse(localStorage.getItem(`vocab_${currentUser}_${studyLang}`) || "[]");
             conversationHistory.push({ role: "user", content: text });
             if (conversationHistory.length > MAX_HISTORY) conversationHistory.shift();
-            document.getElementById('status').innerText = "...";
+            document.getElementById('status').innerText = "Pensando...";
 
-            const systemPrompt = `Eres un tutor de ${studyLang === 'es' ? 'español' : 'inglés'} humano. Escenario: "${currentScenario}". Reglas: Sin etiquetas, corrección amable, termina con pregunta. Vocabulario: [${vocab.join(", ")}].`;
+            const systemPrompt = `Eres un tutor de ${studyLang === 'es' ? 'español' : 'inglés'}. Escenario: "${currentScenario}". Responde en el idioma de estudio. Corrige errores sutilmente y termina siempre con una pregunta corta. Vocabulario del alumno: [${vocab.join(", ")}]`;
 
             try {
                 const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -266,7 +260,7 @@
             finally { document.getElementById('status').innerText = I18N[studyLang].status; }
         }
 
-        function handleUserMessage(t) { addMessage(t, 'user'); processWithGroq(t); }
+        function handleUserMessage(t) { if(!t.trim()) return; addMessage(t, 'user'); processWithGroq(t); }
 
         function addMessage(t, type) {
             const div = document.createElement('div');
@@ -275,7 +269,7 @@
                 ai: "bg-slate-900 text-slate-200 self-start p-3 rounded-2xl rounded-tl-none text-xs max-w-[85%] border border-slate-800 cursor-pointer",
                 system: "bg-slate-800/50 text-slate-500 self-center text-[9px] py-1 px-3 rounded-full uppercase font-bold"
             };
-            div.className = styles[type] + " transition-all duration-300 animate-in fade-in slide-in-from-bottom-2";
+            div.className = styles[type] + " transition-all duration-300 animate-in slide-in-from-bottom-2";
             div.innerText = t;
             if (type === 'ai') div.onclick = () => speak(t);
             const h = document.getElementById('chat-history');
@@ -283,7 +277,34 @@
             h.scrollTo({ top: h.scrollHeight, behavior: 'smooth' });
         }
 
-        // Manejo de vocabulario y Auth (Sin cambios)
+        // --- NAVEGACIÓN Y EVENTOS ---
+        function showTab(tab) {
+            document.getElementById('view-chat').classList.toggle('hidden', tab !== 'chat');
+            document.getElementById('view-library').classList.toggle('hidden', tab !== 'library');
+            document.getElementById('tab-chat-btn').classList.toggle('active', tab === 'chat');
+            document.getElementById('tab-library-btn').classList.toggle('active', tab === 'library');
+            if (tab === 'library') loadRandomLibraryFromCSV();
+        }
+
+        document.getElementById('record-btn').onclick = () => {
+            if (!rec) { alert("Navegador no compatible con voz."); return; }
+            primeSpeech();
+            try {
+                rec.lang = studyLang === 'es' ? 'es-ES' : 'en-US';
+                rec.start();
+                document.getElementById('record-btn').classList.add('bg-red-600', 'animate-pulse');
+                document.getElementById('status').innerText = "Escuchando...";
+            } catch (e) { rec.stop(); }
+        };
+
+        document.getElementById('send-btn').onclick = () => {
+            const i = document.getElementById('text-input');
+            if (i.value.trim()) { handleUserMessage(i.value.trim()); i.value = ''; }
+        };
+
+        document.getElementById('text-input').onkeydown = (e) => { if(e.key === 'Enter') document.getElementById('send-btn').click(); };
+
+        // Vocabulario y Auth
         function handleWordSelection() {
             const s = window.getSelection().toString().trim();
             if (s && s.length > 2 && s.length < 20) {
@@ -300,19 +321,7 @@
 
         function renderVocab() {
             const v = JSON.parse(localStorage.getItem(`vocab_${currentUser}_${studyLang}`) || "[]");
-            document.getElementById('vocab-list').innerHTML = v.map(w => `<span class="bg-blue-900/30 text-blue-400 px-2 py-1 rounded border border-blue-800/50 capitalize">${w}</span>`).join('');
-        }
-
-        function updateAppFlow() {
-            if (!currentUser) { document.getElementById('auth-screen').classList.remove('hidden'); return; }
-            document.getElementById('auth-screen').classList.add('hidden');
-            if (!localStorage.getItem('study_lang')) { document.getElementById('lang-screen').classList.remove('hidden'); return; }
-            document.getElementById('lang-screen').classList.add('hidden');
-            if (!localStorage.getItem('groq_api_key')) { document.getElementById('setup-screen').classList.remove('hidden'); return; }
-            document.getElementById('setup-screen').classList.add('hidden');
-            applyLanguageUI();
-            if (conversationHistory.length === 0) addMessage(I18N[studyLang].welcome, 'ai');
-            renderVocab();
+            document.getElementById('vocab-list').innerHTML = v.map(w => `<span class="bg-blue-900/30 text-blue-400 px-2 py-1 rounded border border-blue-800/50 capitalize font-medium">${w}</span>`).join('');
         }
 
         function applyLanguageUI() {
@@ -330,18 +339,29 @@
             document.getElementById('btn-general').innerText = lang.scenarios.general;
             document.getElementById('btn-entrevista').innerText = lang.scenarios.entrevista;
             document.getElementById('btn-amigo').innerText = lang.scenarios.amigo;
-            document.getElementById('text-display').innerText = lang.libPrompt;
         }
 
-        function handleAuth() { primeSpeech(); const user = document.getElementById('auth-user').value.trim(); if (user) { localStorage.setItem('logged_user', user); currentUser = user; updateAppFlow(); } }
+        function updateAppFlow() {
+            if (!currentUser) { document.getElementById('auth-screen').classList.remove('hidden'); return; }
+            document.getElementById('auth-screen').classList.add('hidden');
+            if (!localStorage.getItem('study_lang')) { document.getElementById('lang-screen').classList.remove('hidden'); return; }
+            document.getElementById('lang-screen').classList.add('hidden');
+            if (!localStorage.getItem('groq_api_key')) { document.getElementById('setup-screen').classList.remove('hidden'); return; }
+            document.getElementById('setup-screen').classList.add('hidden');
+            applyLanguageUI();
+            if (conversationHistory.length === 0) addMessage(I18N[studyLang].welcome, 'ai');
+            renderVocab();
+        }
+
+        function handleAuth() { primeSpeech(); const u = document.getElementById('auth-user').value.trim(); if(u) { localStorage.setItem('logged_user', u); currentUser = u; updateAppFlow(); } }
         function selectLanguage(l) { primeSpeech(); localStorage.setItem('study_lang', l); studyLang = l; location.reload(); }
         function logout() { localStorage.removeItem('logged_user'); location.reload(); }
-        function saveApiKey() { const k = document.getElementById('api-key-input').value.trim(); if (k.startsWith('gsk_')) { localStorage.setItem('groq_api_key', k); updateAppFlow(); } }
+        function saveApiKey() { const k = document.getElementById('api-key-input').value.trim(); if(k.startsWith('gsk_')) { localStorage.setItem('groq_api_key', k); updateAppFlow(); } }
+        function changeLang() { localStorage.removeItem('study_lang'); location.reload(); }
         function setScenario(id) { currentScenario = id; document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active')); document.getElementById(`btn-${id}`).classList.add('active'); resetHistory(); }
         function resetHistory() { conversationHistory = []; document.getElementById('chat-history').innerHTML = ""; addMessage(I18N[studyLang].welcome, 'ai'); }
 
         window.onload = updateAppFlow;
-        document.getElementById('send-btn').onclick = () => { const i = document.getElementById('text-input'); if (i.value.trim()) { handleUserMessage(i.value.trim()); i.value = ''; } };
     </script>
 </body>
 </html>
